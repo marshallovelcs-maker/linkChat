@@ -101,6 +101,7 @@
             padding: 0 1rem;
             gap: 0.5rem;
             overflow-x: auto;
+            min-height: 48px;
         }
         .tab {
             padding: 0.7rem 1.2rem;
@@ -332,6 +333,7 @@
     function saveTabs() {
         const tabs = openTabs.filter(t => t.type === "private").map(t => ({ id: t.id, name: t.name }));
         localStorage.setItem("fembo_tabs", JSON.stringify(tabs));
+        console.log("💾 Сохранены вкладки:", tabs);
     }
     function loadTabs() {
         try {
@@ -340,6 +342,7 @@
                 const tabs = JSON.parse(saved);
                 openTabs = [{ type: "global", id: null, name: "Общий чат" }];
                 tabs.forEach(t => openTabs.push({ type: "private", id: t.id, name: t.name }));
+                console.log("📂 Загружены вкладки:", openTabs);
             }
         } catch(e) {}
     }
@@ -392,6 +395,7 @@
     }
     
     function renderTabs() {
+        console.log("🎨 Рендер вкладок, openTabs:", openTabs);
         tabsContainer.innerHTML = openTabs.map((tab, idx) => {
             const unreadCount = tab.type === "private" ? (unreadCounts.get(tab.id) || 0) : 0;
             const isBlinking = unreadCount > 0 && idx !== activeTabIndex;
@@ -634,12 +638,15 @@
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
                 console.log(`📊 isTabOpen=${isTabOpen}, isActive=${isActive}`);
+                console.log(`📊 Текущие вкладки до изменений:`, openTabs.map(t => t.name));
                 
                 if (!isTabOpen) {
                     // СОЗДАЕМ НОВУЮ ВКЛАДКУ
-                    console.log(`➕ СОЗДАЮ ВКЛАДКУ: ${senderName}`);
+                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ: ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: senderName });
                     saveTabs();
+                    
+                    console.log(`📊 Вкладки после добавления:`, openTabs.map(t => t.name));
                     
                     // Увеличиваем счетчик
                     const current = unreadCounts.get(senderId) || 0;
@@ -653,25 +660,32 @@
                     showToast(`💬 Новое сообщение от ${senderName}`);
                     
                     // СИСТЕМНОЕ СООБЩЕНИЕ В ОБЩИЙ ЧАТ
-                    if (currentChat.type === "global") {
-                        const sysMsg = document.createElement("div");
-                        sysMsg.className = "system-message";
-                        sysMsg.style.background = "#2a5a2a";
-                        sysMsg.style.color = "#ffaa33";
-                        sysMsg.style.border = "2px solid #ffaa33";
-                        sysMsg.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)}! ✨<br>Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
-                        messagesArea.appendChild(sysMsg);
-                        scrollToBottom();
-                        setTimeout(() => sysMsg.remove(), 10000);
-                    }
+                    const sysMsg = document.createElement("div");
+                    sysMsg.className = "system-message";
+                    sysMsg.style.background = "#2a5a2a";
+                    sysMsg.style.color = "#ffaa33";
+                    sysMsg.style.border = "2px solid #ffaa33";
+                    sysMsg.style.padding = "0.8rem";
+                    sysMsg.style.margin = "0.5rem auto";
+                    sysMsg.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)}! ✨<br>Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
+                    messagesArea.appendChild(sysMsg);
+                    scrollToBottom();
+                    setTimeout(() => sysMsg.remove(), 10000);
+                    
+                    // ДОПОЛНИТЕЛЬНО: показываем alert для надежности
+                    alert(`📩 Новое сообщение от ${senderName}! Вкладка добавлена.`);
+                    
                 } else if (!isActive) {
-                    // Вкладка есть, увеличиваем счетчик
+                    // Вкладка есть, но не активна - увеличиваем счетчик
                     console.log(`🔔 УВЕЛИЧИВАЮ СЧЕТЧИК для ${senderName}`);
                     const current = unreadCounts.get(senderId) || 0;
                     unreadCounts.set(senderId, current + 1);
                     saveUnread();
                     renderTabs();
                     showToast(`💬 Новое сообщение от ${senderName}`);
+                    
+                    // ДОПОЛНИТЕЛЬНО: показываем alert для надежности
+                    alert(`📩 Новое сообщение от ${senderName}!`);
                 }
                 
                 // Если чат активен, обновляем
@@ -814,6 +828,7 @@
     console.log("🚀 ЧАТ ЗАПУЩЕН!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
+    console.log("📂 Открытые вкладки:", openTabs.map(t => t.name));
     console.log("💡 Откройте другую вкладку браузера и отправьте сообщение этому пользователю");
 </script>
 </body>
