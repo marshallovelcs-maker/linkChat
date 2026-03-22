@@ -485,16 +485,16 @@
     let activeTabIndex = 0;
     let allUsers = new Map();
     
-    // Хранилище активных слушателей для личных чатов
+    // Хранилище активных слушателей
     let activePrivateListeners = new Map();
     let globalListenerActive = false;
     
-    // Хранилище непрочитанных сообщений (с сохранением в localStorage)
+    // Хранилище непрочитанных сообщений (просто счетчики)
     let unreadMessages = new Map();
-    const UNREAD_STORAGE_KEY = "fembo_unread_messages";
+    const UNREAD_STORAGE_KEY = "fembo_unread_counts";
     
-    // Загрузка непрочитанных сообщений из localStorage
-    function loadUnreadFromStorage() {
+    // Загрузка счетчиков из localStorage
+    function loadUnreadCounts() {
         try {
             const saved = localStorage.getItem(UNREAD_STORAGE_KEY);
             if (saved) {
@@ -503,59 +503,45 @@
                 Object.entries(parsed).forEach(([key, value]) => {
                     unreadMessages.set(key, value);
                 });
-                console.log("📦 Загружены непрочитанные:", Array.from(unreadMessages.entries()));
+                console.log("📦 Загружены счетчики:", Array.from(unreadMessages.entries()));
             }
-        } catch (e) {
-            console.error("Ошибка загрузки непрочитанных:", e);
-        }
+        } catch (e) {}
     }
     
-    // Сохранение непрочитанных сообщений в localStorage
-    function saveUnreadToStorage() {
+    // Сохранение счетчиков
+    function saveUnreadCounts() {
         try {
             const obj = {};
             unreadMessages.forEach((value, key) => {
                 obj[key] = value;
             });
             localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify(obj));
-        } catch (e) {
-            console.error("Ошибка сохранения непрочитанных:", e);
-        }
+        } catch (e) {}
     }
     
-    // Увеличение счетчика непрочитанных
+    // Увеличение счетчика
     function incrementUnread(chatId, senderName) {
         const key = `private_${chatId}`;
         const current = unreadMessages.get(key) || 0;
         unreadMessages.set(key, current + 1);
-        saveUnreadToStorage();
+        saveUnreadCounts();
         
         // Обновляем отображение вкладки
-        const tabIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === chatId);
-        if (tabIndex !== -1 && tabIndex !== activeTabIndex) {
-            renderTabs();
-        }
-        
+        renderTabs();
         showToast(`📩 Новое сообщение от ${senderName}`);
     }
     
-    // Сброс непрочитанных для чата
+    // Сброс счетчика
     function clearUnread(chatId) {
         const key = `private_${chatId}`;
         if (unreadMessages.has(key)) {
             unreadMessages.delete(key);
-            saveUnreadToStorage();
-            console.log(`✅ Сброшены непрочитанные для чата ${chatId}`);
-            
-            // Обновляем отображение вкладки
-            const tabIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === chatId);
-            if (tabIndex !== -1) {
-                renderTabs();
-            }
+            saveUnreadCounts();
+            renderTabs();
         }
     }
     
-    // Получение количества непрочитанных для чата
+    // Получение счетчика
     function getUnreadCount(chatId) {
         return unreadMessages.get(`private_${chatId}`) || 0;
     }
@@ -600,19 +586,16 @@
         });
     }
     
-    // Функция для добавления нового личного чата
     function addPrivateChat(senderId, senderName, showNotification = true) {
         const existingIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === senderId);
         
         if (existingIndex !== -1) {
-            // Вкладка уже существует, но если она не активна, увеличиваем счетчик
             if (existingIndex !== activeTabIndex && showNotification) {
                 incrementUnread(senderId, senderName);
             }
             return;
         }
         
-        // Создаем новую вкладку
         openTabs.push({
             type: "private",
             id: senderId,
@@ -627,7 +610,7 @@
     }
     
     function switchToTab(index) {
-        // Останавливаем текущий слушатель личного чата
+        // Останавливаем текущий слушатель
         if (currentChat.type === "private") {
             const listener = activePrivateListeners.get(currentChat.id);
             if (listener) {
@@ -636,7 +619,6 @@
             }
         }
         
-        // Сбрасываем непрочитанные для чата, на который переключаемся
         const newChat = openTabs[index];
         if (newChat.type === "private") {
             clearUnread(newChat.id);
@@ -646,11 +628,8 @@
         currentChat = newChat;
         
         renderTabs();
-        
-        // Очищаем область сообщений
         messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
         
-        // Загружаем сообщения
         if (currentChat.type === "global") {
             loadGlobalMessages();
         } else {
@@ -658,7 +637,6 @@
         }
     }
     
-    // Загрузка глобальных сообщений
     function loadGlobalMessages() {
         if (globalListenerActive) return;
         
@@ -694,7 +672,6 @@
         }, 1000);
     }
     
-    // Загрузка личных сообщений
     function loadPrivateMessages(targetUserId) {
         if (activePrivateListeners.has(targetUserId)) return;
         
@@ -732,62 +709,26 @@
         }, 1000);
     }
     
-    // Функция для отслеживания новых личных сообщений
-    function setupPrivateMessagesListener() {
-        console.log("🔔 Запуск слушателя личных сообщений...");
+    // ГЛАВНЫЙ СЛУШАТЕЛЬ ДЛЯ УВЕДОМЛЕНИЙ
+    function setupNotificationListener() {
+        console.log("🔔 Запуск слушателя уведомлений...");
         
-        // Слушаем все приватные сообщения в базе
+        // Слушаем все приватные сообщения
         const privateMessagesRef = ref(db, "private_messages");
         
         onChildAdded(privateMessagesRef, (snapshot) => {
             const data = snapshot.val();
-            const messageId = snapshot.key;
             
-            // Проверяем, что сообщение адресовано текущему пользователю и не от него самого
+            // Проверяем, что сообщение адресовано текущему пользователю и не от него
             if (data && data.toId === userId && data.fromId !== userId) {
-                console.log("📨 Новое личное сообщение от:", data.username, "ID:", messageId);
+                console.log("📨 НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от:", data.username);
                 
-                // Проверяем, не прочитано ли уже это сообщение
-                const readKey = `read_${userId}_${messageId}`;
-                const isRead = localStorage.getItem(readKey);
-                
-                if (!isRead) {
-                    // Добавляем или обновляем вкладку с уведомлением
-                    addPrivateChat(data.fromId, data.username, true);
-                    
-                    // Помечаем сообщение как прочитанное при открытии чата
-                    // Сохраняем ID сообщения, чтобы при обновлении не показывать повторно
-                    localStorage.setItem(readKey, "true");
-                    
-                    // Очищаем старые записи (оставляем только последние 100)
-                    cleanOldReadMessages();
-                }
+                // Добавляем или обновляем вкладку
+                addPrivateChat(data.fromId, data.username, true);
             }
         });
-    }
-    
-    // Очистка старых записей о прочитанных сообщениях
-    function cleanOldReadMessages() {
-        const keys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(`read_${userId}_`)) {
-                keys.push(key);
-            }
-        }
         
-        // Если записей больше 200, удаляем самые старые
-        if (keys.length > 200) {
-            keys.sort();
-            const toDelete = keys.slice(0, keys.length - 100);
-            toDelete.forEach(key => localStorage.removeItem(key));
-        }
-    }
-    
-    // При загрузке чата отмечаем все сообщения как прочитанные
-    function markChatAsRead(chatId) {
-        // При переключении на вкладку сбрасываем счетчик
-        clearUnread(chatId);
+        console.log("✅ Слушатель уведомлений запущен");
     }
     
     function addMessageToDOM(username, text, timestamp, isOwn = false) {
@@ -851,9 +792,6 @@
             off(listener.queryRef, 'child_added', listener.callback);
             activePrivateListeners.delete(tabToClose.id);
         }
-        
-        // Не удаляем непрочитанные при закрытии вкладки, они остаются в localStorage
-        // При следующем открытии чата они будут сброшены
         
         openTabs.splice(index, 1);
         
@@ -1025,21 +963,20 @@
     
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
     
-    // Загружаем непрочитанные из localStorage
-    loadUnreadFromStorage();
+    // Загружаем сохраненные счетчики
+    loadUnreadCounts();
     
-    // Запускаем отслеживание новых личных сообщений
-    setupPrivateMessagesListener();
+    // ЗАПУСКАЕМ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ
+    setupNotificationListener();
     
     // Загружаем общий чат
     loadGlobalMessages();
     
-    // Восстанавливаем вкладки из сохраненных непрочитанных
-    function restoreTabsFromUnread() {
+    // Восстанавливаем вкладки из сохраненных счетчиков
+    setTimeout(() => {
         const unreadKeys = Array.from(unreadMessages.keys());
         unreadKeys.forEach(key => {
             const chatId = key.replace("private_", "");
-            // Получаем имя пользователя из allUsers
             const userData = allUsers.get(chatId);
             if (userData && !openTabs.some(tab => tab.type === "private" && tab.id === chatId)) {
                 openTabs.push({
@@ -1052,11 +989,6 @@
         if (openTabs.length > 1) {
             renderTabs();
         }
-    }
-    
-    // Ждем загрузки списка пользователей
-    setTimeout(() => {
-        restoreTabsFromUnread();
     }, 2000);
 </script>
 </body>
