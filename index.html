@@ -474,7 +474,7 @@
     // ----- Данные пользователя -----
     let userId = localStorage.getItem("fembo_user_id");
     if (!userId) {
-        userId = "user_" + Date.now() "_" + Math.random().toString(36).substr(2, 8);
+        userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 8);
         localStorage.setItem("fembo_user_id", userId);
     }
     
