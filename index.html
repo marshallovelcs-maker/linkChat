@@ -5,14 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Fembo — Чат</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: system-ui, 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
             background: #1a1a1a;
             min-height: 100vh;
             display: flex;
@@ -20,18 +15,15 @@
             align-items: center;
             padding: 1rem;
         }
-
         .chat-container {
             max-width: 1200px;
             width: 100%;
             height: 90vh;
-            min-height: 550px;
             background: #0a0a0a;
             display: flex;
             overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 25px 50px -12px black;
         }
-
         .sidebar {
             width: 280px;
             background: #000000;
@@ -40,18 +32,15 @@
             flex-direction: column;
             overflow: hidden;
         }
-
         .sidebar-header {
             padding: 1rem;
             border-bottom: 1px solid #2a2a2a;
         }
-
         .sidebar-header h3 {
             color: #ffffff;
             font-size: 0.9rem;
             margin-bottom: 0.8rem;
         }
-
         .search-box {
             width: 100%;
             background: #111111;
@@ -61,13 +50,11 @@
             font-size: 0.85rem;
             outline: none;
         }
-
         .users-list {
             flex: 1;
             overflow-y: auto;
             padding: 0.5rem;
         }
-
         .user-item {
             display: flex;
             align-items: center;
@@ -79,60 +66,14 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-
-        .user-item:hover {
-            background: #1a1a1a;
-            border-color: #4a4a4a;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .user-avatar {
-            font-size: 1.2rem;
-        }
-
-        .user-name {
-            color: #e0e0e0;
-            font-size: 0.85rem;
-        }
-
-        .user-status {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-
-        .status-online {
-            background: #2ecc71;
-        }
-
-        .status-offline {
-            background: #7f8c8d;
-        }
-
-        .users-list::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .users-list::-webkit-scrollbar-track {
-            background: #000000;
-        }
-
-        .users-list::-webkit-scrollbar-thumb {
-            background: #2a2a2a;
-        }
-
-        .main-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
+        .user-item:hover { background: #1a1a1a; }
+        .user-info { display: flex; align-items: center; gap: 8px; }
+        .user-avatar { font-size: 1.2rem; }
+        .user-name { color: #e0e0e0; font-size: 0.85rem; }
+        .user-status { width: 8px; height: 8px; border-radius: 50%; }
+        .status-online { background: #2ecc71; }
+        .status-offline { background: #7f8c8d; }
+        .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .chat-header {
             background: #000000;
             padding: 1rem 1.5rem;
@@ -140,26 +81,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
         }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo {
-            font-size: 24px;
-        }
-
-        .brand h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #ffffff;
-        }
-
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo { font-size: 24px; }
+        .brand h1 { font-size: 1.5rem; font-weight: 600; color: #ffffff; }
         .copy-link-btn {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
@@ -167,14 +92,8 @@
             font-size: 0.85rem;
             padding: 0.5rem 1.2rem;
             cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s;
         }
-
-        .copy-link-btn:hover {
-            background: #3a3a3a;
-        }
-
+        .copy-link-btn:hover { background: #3a3a3a; }
         .tabs {
             display: flex;
             background: #0a0a0a;
@@ -183,7 +102,6 @@
             gap: 0.5rem;
             overflow-x: auto;
         }
-
         .tab {
             padding: 0.7rem 1.2rem;
             background: #111111;
@@ -193,10 +111,8 @@
             cursor: pointer;
             font-size: 0.85rem;
             white-space: nowrap;
-            transition: all 0.2s;
             position: relative;
         }
-
         .tab.active {
             background: #1a1a1a;
             color: #ffffff;
@@ -204,29 +120,10 @@
             border-bottom-color: #1a1a1a;
             margin-bottom: -1px;
         }
-
-        .tab.blinking {
-            animation: blink 0.8s ease-in-out infinite;
-            background: #2a5a2a;
-            color: #ffffff;
-        }
-
-        @keyframes blink {
-            0%, 100% { background: #2a5a2a; }
-            50% { background: #ffaa33; color: #000000; }
-        }
-
-        .close-tab {
-            margin-left: 8px;
-            color: #888888;
-            cursor: pointer;
-            font-size: 1rem;
-        }
-
-        .close-tab:hover {
-            color: #ff8888;
-        }
-
+        .tab.blinking { animation: blink 0.8s infinite; background: #2a5a2a; color: #fff; }
+        @keyframes blink { 0%,100% { background: #2a5a2a; } 50% { background: #ffaa33; color: #000; } }
+        .close-tab { margin-left: 8px; color: #888; cursor: pointer; }
+        .close-tab:hover { color: #ff8888; }
         .unread-badge {
             position: absolute;
             top: -8px;
@@ -238,9 +135,7 @@
             border-radius: 10px;
             min-width: 18px;
             text-align: center;
-            font-weight: bold;
         }
-
         .messages-area {
             flex: 1;
             overflow-y: auto;
@@ -248,94 +143,58 @@
             display: flex;
             flex-direction: column;
             gap: 1rem;
-            scroll-behavior: smooth;
             background: #0f0f0f;
         }
-
         .message {
             display: flex;
             flex-direction: column;
             max-width: 75%;
             width: fit-content;
         }
-
-        .message.own {
-            align-self: flex-end;
-            margin-left: auto;
-        }
-
+        .message.own { align-self: flex-end; margin-left: auto; }
         .message-bubble {
             background: #1e1e1e;
             padding: 0.8rem 1.2rem;
             color: #e0e0e0;
             word-break: break-word;
             font-size: 0.95rem;
-            line-height: 1.45;
             border: 1px solid #2a2a2a;
-            display: inline-block;
-            width: fit-content;
-            max-width: 100%;
         }
-
-        .message.own .message-bubble {
-            background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            color: #ffffff;
-        }
-
+        .message.own .message-bubble { background: #2a2a2a; border-color: #3a3a3a; color: #fff; }
         .message-sender {
             font-size: 0.7rem;
-            color: #888888;
+            color: #888;
             margin-top: 0.3rem;
-            padding: 0 0.2rem;
             display: flex;
             gap: 0.5rem;
-            flex-wrap: wrap;
         }
-
-        .message.own .message-sender {
-            justify-content: flex-end;
-        }
-
-        .sender-name {
-            font-weight: 600;
-            color: #aaaaaa;
-        }
-
-        .message-time {
-            color: #666666;
-        }
-
+        .message.own .message-sender { justify-content: flex-end; }
+        .sender-name { font-weight: 600; color: #aaa; }
+        .message-time { color: #666; }
         .system-message {
             text-align: center;
             font-size: 0.75rem;
-            color: #888888;
-            background: #111111;
+            color: #888;
+            background: #111;
             margin: 0.3rem auto;
             padding: 0.4rem 1rem;
             width: fit-content;
-            max-width: 90%;
-            border: 1px solid #222222;
+            border: 1px solid #222;
         }
-
         .input-area {
             background: #0a0a0a;
-            padding: 1rem 1.5rem 1.2rem;
+            padding: 1rem 1.5rem;
             border-top: 1px solid #1a1a1a;
             display: flex;
             gap: 0.75rem;
-            align-items: center;
         }
-
         .message-input-wrapper {
             flex: 1;
             display: flex;
             background: #111111;
-            align-items: center;
             padding: 0.2rem 0.2rem 0.2rem 1rem;
             border: 1px solid #2a2a2a;
         }
-
         #messageInput {
             flex: 1;
             background: transparent;
@@ -345,7 +204,6 @@
             font-size: 0.95rem;
             outline: none;
         }
-
         button {
             background: #1a1a1a;
             border: 1px solid #3a3a3a;
@@ -353,84 +211,44 @@
             font-weight: 500;
             color: #e0e0e0;
             cursor: pointer;
-            transition: all 0.2s;
-            font-size: 0.9rem;
         }
-
-        button:hover {
-            background: #2a2a2a;
-        }
-
-        .messages-area::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .messages-area::-webkit-scrollbar-track {
-            background: #0a0a0a;
-        }
-
-        .messages-area::-webkit-scrollbar-thumb {
-            background: #2a2a2a;
-        }
-
+        button:hover { background: #2a2a2a; }
         .toast-msg {
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: #000000;
+            background: #000;
             border: 1px solid #3a3a3a;
             color: #e0e0e0;
             padding: 0.6rem 1.5rem;
             font-size: 0.85rem;
-            pointer-events: none;
             z-index: 999;
         }
-
         @media (max-width: 768px) {
-            .sidebar {
-                width: 220px;
-            }
-            .message {
-                max-width: 95%;
-            }
+            .sidebar { width: 220px; }
+            .message { max-width: 95%; }
         }
     </style>
 </head>
 <body>
-
 <div class="chat-container">
     <div class="sidebar">
         <div class="sidebar-header">
             <h3>◼ Пользователи</h3>
-            <input type="text" id="searchUsers" class="search-box" placeholder="Поиск по нику...">
+            <input type="text" id="searchUsers" class="search-box" placeholder="Поиск...">
         </div>
-        <div class="users-list" id="usersList">
-            <div class="system-message" style="margin: 1rem;">Загрузка...</div>
-        </div>
+        <div class="users-list" id="usersList"><div class="system-message">Загрузка...</div></div>
     </div>
-
     <div class="main-area">
         <div class="chat-header">
-            <div class="brand">
-                <div class="logo">🦊</div>
-                <h1>Fembo</h1>
-            </div>
+            <div class="brand"><div class="logo">🦊</div><h1>Fembo</h1></div>
             <button class="copy-link-btn" id="copyLinkButton">⎘ Поделиться</button>
         </div>
-
-        <div class="tabs" id="tabsContainer">
-            <div class="tab active"># Общий чат</div>
-        </div>
-
-        <div class="messages-area" id="messagesArea">
-            <div class="system-message">◼ Загрузка сообщений...</div>
-        </div>
-
+        <div class="tabs" id="tabsContainer"><div class="tab active"># Общий чат</div></div>
+        <div class="messages-area" id="messagesArea"><div class="system-message">◼ Загрузка...</div></div>
         <div class="input-area">
-            <div class="message-input-wrapper">
-                <input type="text" id="messageInput" placeholder="Напишите сообщение..." maxlength="500">
-            </div>
+            <div class="message-input-wrapper"><input type="text" id="messageInput" placeholder="Напишите сообщение..."></div>
             <button id="sendButton">◼ Отправить</button>
         </div>
     </div>
@@ -449,7 +267,6 @@
     import { initializeApp } from "firebase/app";
     import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, remove, off } from "firebase/database";
 
-    // Firebase конфигурация
     const firebaseConfig = {
         apiKey: "AIzaSyACbUMNMGOQLg-iCDVuceIcld7UJTayYqU",
         authDomain: "chat-f3029.firebaseapp.com",
@@ -463,116 +280,97 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
-    // ----- DOM элементы -----
+    // DOM
     const messagesArea = document.getElementById("messagesArea");
     const messageInput = document.getElementById("messageInput");
     const sendBtn = document.getElementById("sendButton");
-    const copyLinkBtn = document.getElementById("copyLinkButton");
+    const copyBtn = document.getElementById("copyLinkButton");
     const usersListDiv = document.getElementById("usersList");
     const searchInput = document.getElementById("searchUsers");
     const tabsContainer = document.getElementById("tabsContainer");
     
-    // ----- Данные пользователя -----
-    let userId = localStorage.getItem("fembo_user_id");
+    // User data
+    let userId = localStorage.getItem("fembo_id");
     if (!userId) {
-        userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 8);
-        localStorage.setItem("fembo_user_id", userId);
+        userId = "u_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6);
+        localStorage.setItem("fembo_id", userId);
     }
+    let username = localStorage.getItem("fembo_name") || "Гость_" + Math.floor(Math.random() * 1000);
     
-    let currentUsername = localStorage.getItem("fembo_username") || "Гость_" + Math.floor(Math.random() * 1000);
-    
-    // ----- Состояние -----
-    let currentChat = { type: "global", id: null, name: "Общий чат" };
+    // State
+    let currentChat = { type: "global", id: null };
     let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
-    let allUsers = new Map();
+    let users = new Map();
+    let unread = new Map(); // key: userId, value: count
     
-    // Кэш сообщений
-    let globalMessages = [];
-    let privateMessages = new Map(); // key: userId, value: array of messages
+    // Message caches - храним только ID для предотвращения дублирования
+    let globalMessages = []; // { id, username, text, timestamp, userId }
+    let globalMessageIds = new Set();
+    let privateMessages = new Map(); // key: userId, value: array of { id, username, text, timestamp, fromId }
+    let privateMessageIds = new Map(); // key: userId, value: Set of message IDs
     
-    // Счетчики непрочитанных
-    let unreadCounts = new Map();
-    
-    // Слушатели
+    // Firebase listeners
     let globalListener = null;
-    let privateListeners = new Map();
+    let privateListeners = new Map(); // key: userId, value: { ref, callback }
     
-    // ----- Сохранение/загрузка -----
+    // Save/Load
     function saveTabs() {
         const tabs = openTabs.filter(t => t.type === "private").map(t => ({ id: t.id, name: t.name }));
         localStorage.setItem("fembo_tabs", JSON.stringify(tabs));
     }
-    
     function loadTabs() {
         try {
             const saved = localStorage.getItem("fembo_tabs");
             if (saved) {
                 const tabs = JSON.parse(saved);
                 openTabs = [{ type: "global", id: null, name: "Общий чат" }];
-                tabs.forEach(t => {
-                    openTabs.push({ type: "private", id: t.id, name: t.name });
-                });
+                tabs.forEach(t => openTabs.push({ type: "private", id: t.id, name: t.name }));
             }
         } catch(e) {}
     }
-    
     function saveUnread() {
         const obj = {};
-        unreadCounts.forEach((v, k) => obj[k] = v);
+        unread.forEach((v, k) => obj[k] = v);
         localStorage.setItem("fembo_unread", JSON.stringify(obj));
     }
-    
     function loadUnread() {
         try {
             const saved = localStorage.getItem("fembo_unread");
             if (saved) {
                 const obj = JSON.parse(saved);
-                unreadCounts.clear();
-                Object.entries(obj).forEach(([k, v]) => unreadCounts.set(k, v));
+                unread.clear();
+                Object.entries(obj).forEach(([k, v]) => unread.set(k, v));
             }
         } catch(e) {}
     }
     
-    // ----- Функции отображения -----
+    // UI Helpers
     function escapeHtml(str) {
         if (!str) return "";
-        return str.replace(/[&<>]/g, m => {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
+        return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
     }
-    
     function scrollToBottom() {
-        setTimeout(() => {
-            messagesArea.scrollTop = messagesArea.scrollHeight;
-        }, 50);
+        setTimeout(() => messagesArea.scrollTop = messagesArea.scrollHeight, 50);
     }
-    
-    function showToast(text) {
-        let toast = document.querySelector(".toast-msg");
-        if (toast) toast.remove();
-        const div = document.createElement("div");
-        div.className = "toast-msg";
-        div.innerText = text;
-        document.body.appendChild(div);
-        setTimeout(() => {
-            div.style.opacity = "0";
-            setTimeout(() => div.remove(), 300);
-        }, 2000);
+    function showToast(msg) {
+        let t = document.querySelector(".toast-msg");
+        if (t) t.remove();
+        const d = document.createElement("div");
+        d.className = "toast-msg";
+        d.innerText = msg;
+        document.body.appendChild(d);
+        setTimeout(() => { d.style.opacity = "0"; setTimeout(() => d.remove(), 300); }, 2000);
     }
-    
-    function addMessageToDOM(username, text, timestamp, isOwn) {
+    function addMessageToDOM(name, text, ts, isOwn) {
         const div = document.createElement("div");
         div.className = `message ${isOwn ? 'own' : ''}`;
-        const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         div.innerHTML = `
             <div class="message-bubble">${escapeHtml(text)}</div>
             <div class="message-sender">
-                <span class="sender-name">${escapeHtml(username)}</span>
-                <span class="message-time">${timeStr}</span>
+                <span class="sender-name">${escapeHtml(name)}</span>
+                <span class="message-time">${time}</span>
             </div>
         `;
         messagesArea.appendChild(div);
@@ -581,17 +379,16 @@
     
     function renderTabs() {
         tabsContainer.innerHTML = openTabs.map((tab, idx) => {
-            const unread = tab.type === "private" ? (unreadCounts.get(tab.id) || 0) : 0;
-            const isBlinking = unread > 0 && idx !== activeTabIndex;
+            const unreadCount = tab.type === "private" ? (unread.get(tab.id) || 0) : 0;
+            const isBlinking = unreadCount > 0 && idx !== activeTabIndex;
             return `
                 <div class="tab ${idx === activeTabIndex ? 'active' : ''} ${isBlinking ? 'blinking' : ''}" data-index="${idx}">
                     ${tab.type === "global" ? "# " : "💬 "}${escapeHtml(tab.name)}
-                    ${unread > 0 && idx !== activeTabIndex ? `<span class="unread-badge">${unread > 9 ? '9+' : unread}</span>` : ''}
+                    ${unreadCount > 0 && idx !== activeTabIndex ? `<span class="unread-badge">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
                     ${tab.type !== "global" ? `<span class="close-tab" data-index="${idx}">✕</span>` : ''}
                 </div>
             `;
         }).join('');
-        
         document.querySelectorAll('.tab').forEach(tab => {
             const idx = parseInt(tab.dataset.index);
             tab.addEventListener('click', (e) => {
@@ -606,11 +403,11 @@
     }
     
     function switchTab(index) {
-        // Останавливаем слушатель текущего чата
+        // Stop current private listener
         if (currentChat.type === "private") {
-            const listener = privateListeners.get(currentChat.id);
-            if (listener) {
-                off(listener.ref, 'child_added', listener.callback);
+            const l = privateListeners.get(currentChat.id);
+            if (l) {
+                off(l.ref, 'child_added', l.callback);
                 privateListeners.delete(currentChat.id);
             }
         }
@@ -618,20 +415,20 @@
         activeTabIndex = index;
         currentChat = openTabs[index];
         
-        // Сбрасываем непрочитанные
+        // Clear unread for this chat
         if (currentChat.type === "private") {
-            unreadCounts.delete(currentChat.id);
+            unread.delete(currentChat.id);
             saveUnread();
         }
         
         renderTabs();
         
-        // Отображаем сообщения
+        // Display messages
         messagesArea.innerHTML = '<div class="system-message">◼ Загрузка...</div>';
         
         if (currentChat.type === "global") {
             if (globalMessages.length === 0) {
-                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
+                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений</div>';
             } else {
                 messagesArea.innerHTML = '';
                 globalMessages.forEach(msg => {
@@ -639,12 +436,12 @@
                 });
             }
         } else {
-            const messages = privateMessages.get(currentChat.id) || [];
-            if (messages.length === 0) {
-                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
+            const msgs = privateMessages.get(currentChat.id) || [];
+            if (msgs.length === 0) {
+                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений</div>';
             } else {
                 messagesArea.innerHTML = '';
-                messages.forEach(msg => {
+                msgs.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
                 });
             }
@@ -654,14 +451,12 @@
     
     function closeTab(index) {
         if (openTabs[index].type === "global") return;
-        
         const tab = openTabs[index];
-        const listener = privateListeners.get(tab.id);
-        if (listener) {
-            off(listener.ref, 'child_added', listener.callback);
+        const l = privateListeners.get(tab.id);
+        if (l) {
+            off(l.ref, 'child_added', l.callback);
             privateListeners.delete(tab.id);
         }
-        
         openTabs.splice(index, 1);
         saveTabs();
         
@@ -669,26 +464,19 @@
             activeTabIndex = Math.max(0, openTabs.length - 1);
             currentChat = openTabs[activeTabIndex];
             renderTabs();
-            
             messagesArea.innerHTML = '<div class="system-message">◼ Загрузка...</div>';
             if (currentChat.type === "global") {
-                if (globalMessages.length === 0) {
-                    messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений</div>';
-                } else {
+                if (globalMessages.length === 0) messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений</div>';
+                else {
                     messagesArea.innerHTML = '';
-                    globalMessages.forEach(msg => {
-                        addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId);
-                    });
+                    globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId));
                 }
             } else {
                 const msgs = privateMessages.get(currentChat.id) || [];
-                if (msgs.length === 0) {
-                    messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений</div>';
-                } else {
+                if (msgs.length === 0) messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений</div>';
+                else {
                     messagesArea.innerHTML = '';
-                    msgs.forEach(msg => {
-                        addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
-                    });
+                    msgs.forEach(msg => addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId));
                 }
                 startPrivateListener(currentChat.id);
             }
@@ -706,24 +494,25 @@
             switchTab(existing);
             return;
         }
-        
         openTabs.push({ type: "private", id: targetId, name: targetName });
         saveTabs();
         renderTabs();
         switchTab(openTabs.length - 1);
     }
     
-    // ----- Слушатели Firebase -----
+    // GLOBAL MESSAGES
     function startGlobalListener() {
         if (globalListener) return;
-        
         const globalQuery = query(ref(db, "global_messages"), limitToLast(100));
-        
         globalListener = onChildAdded(globalQuery, (snapshot) => {
             const data = snapshot.val();
+            const msgId = snapshot.key;
             if (!data || !data.text) return;
+            if (globalMessageIds.has(msgId)) return;
+            globalMessageIds.add(msgId);
             
             globalMessages.push({
+                id: msgId,
                 username: data.username,
                 text: data.text,
                 timestamp: data.timestamp,
@@ -740,6 +529,7 @@
         });
     }
     
+    // PRIVATE MESSAGES
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
         
@@ -747,34 +537,48 @@
         const chatRef = ref(db, `private_messages/${chatId}`);
         const chatQuery = query(chatRef, limitToLast(100));
         
+        // Initialize message IDs set for this chat
+        if (!privateMessageIds.has(targetId)) {
+            privateMessageIds.set(targetId, new Set());
+        }
+        const msgIds = privateMessageIds.get(targetId);
+        
         const callback = (snapshot) => {
             const data = snapshot.val();
+            const msgId = snapshot.key;
             if (!data || !data.text) return;
+            if (msgIds.has(msgId)) return;
+            msgIds.add(msgId);
             
-            let messages = privateMessages.get(targetId) || [];
-            messages.push({
+            let msgs = privateMessages.get(targetId) || [];
+            msgs.push({
+                id: msgId,
                 username: data.username,
                 text: data.text,
                 timestamp: data.timestamp,
                 fromId: data.fromId,
                 toId: data.toId
             });
-            messages.sort((a, b) => a.timestamp - b.timestamp);
-            privateMessages.set(targetId, messages);
+            msgs.sort((a, b) => a.timestamp - b.timestamp);
+            privateMessages.set(targetId, msgs);
             
-            // Если сообщение для меня и чат не активен - увеличиваем счетчик
-            if (data.toId === userId && data.fromId !== userId && currentChat.id !== targetId) {
-                const current = unreadCounts.get(targetId) || 0;
-                unreadCounts.set(targetId, current + 1);
+            // Check if message is for current user and chat is not active
+            const isForMe = data.toId === userId;
+            const isNotFromMe = data.fromId !== userId;
+            const isNotActive = currentChat.type !== "private" || currentChat.id !== targetId;
+            
+            if (isForMe && isNotFromMe && isNotActive) {
+                const current = unread.get(targetId) || 0;
+                unread.set(targetId, current + 1);
                 saveUnread();
                 renderTabs();
                 showToast(`📩 Новое сообщение от ${data.username}`);
             }
             
-            // Если этот чат сейчас активен - обновляем
+            // Update UI if this chat is active
             if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
-                messages.forEach(msg => {
+                msgs.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
                 });
                 scrollToBottom();
@@ -785,12 +589,11 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // ----- Отправка сообщения -----
+    // SEND MESSAGE
     let lastSend = 0;
     function sendMessage() {
         const text = messageInput.value.trim();
         if (!text) return;
-        
         if (Date.now() - lastSend < 500) {
             showToast("◼ Подождите");
             return;
@@ -799,7 +602,7 @@
         
         if (currentChat.type === "global") {
             push(ref(db, "global_messages"), {
-                username: currentUsername,
+                username: username,
                 text: text,
                 timestamp: Date.now(),
                 userId: userId
@@ -807,104 +610,91 @@
         } else {
             const chatId = [userId, currentChat.id].sort().join('_');
             push(ref(db, `private_messages/${chatId}`), {
-                username: currentUsername,
+                username: username,
                 text: text,
                 timestamp: Date.now(),
                 fromId: userId,
                 toId: currentChat.id
             });
         }
-        
         messageInput.value = "";
         messageInput.focus();
     }
     
-    // ----- Статус онлайн -----
+    // USER STATUS
     function updateStatus() {
         set(ref(db, `users/${userId}`), {
-            username: currentUsername,
+            username: username,
             lastSeen: Date.now(),
             online: true
         });
     }
     
-    // ----- Список пользователей -----
+    // USERS LIST
     onValue(ref(db, "users"), (snapshot) => {
-        const users = snapshot.val();
-        allUsers.clear();
-        if (users) {
+        const data = snapshot.val();
+        users.clear();
+        if (data) {
             const now = Date.now();
-            for (let id in users) {
+            for (let id in data) {
                 if (id !== userId) {
-                    const online = (now - (users[id].lastSeen || 0) < 120000);
-                    allUsers.set(id, { name: users[id].username, online });
+                    const online = (now - (data[id].lastSeen || 0) < 120000);
+                    users.set(id, { name: data[id].username, online });
                 }
             }
         }
-        
         const term = searchInput.value.toLowerCase();
-        const list = Array.from(allUsers.entries())
-            .filter(([id, data]) => data.name.toLowerCase().includes(term))
+        const list = Array.from(users.entries())
+            .filter(([id, u]) => u.name.toLowerCase().includes(term))
             .sort((a, b) => (b[1].online ? 1 : 0) - (a[1].online ? 1 : 0));
         
         if (list.length === 0) {
-            usersListDiv.innerHTML = '<div class="system-message" style="margin:1rem;">◼ Нет пользователей</div>';
+            usersListDiv.innerHTML = '<div class="system-message">◼ Нет пользователей</div>';
             return;
         }
-        
-        usersListDiv.innerHTML = list.map(([id, data]) => `
-            <div class="user-item" data-id="${id}" data-name="${data.name}">
+        usersListDiv.innerHTML = list.map(([id, u]) => `
+            <div class="user-item" data-id="${id}" data-name="${u.name}">
                 <div class="user-info">
                     <span class="user-avatar">🦊</span>
-                    <span class="user-name">${escapeHtml(data.name)}</span>
+                    <span class="user-name">${escapeHtml(u.name)}</span>
                 </div>
-                <div class="user-status ${data.online ? 'status-online' : 'status-offline'}"></div>
+                <div class="user-status ${u.online ? 'status-online' : 'status-offline'}"></div>
             </div>
         `).join('');
-        
         document.querySelectorAll('.user-item').forEach(el => {
-            el.addEventListener('click', () => {
-                openPrivateChat(el.dataset.id, el.dataset.name);
-            });
+            el.addEventListener('click', () => openPrivateChat(el.dataset.id, el.dataset.name));
         });
     });
     
     searchInput.addEventListener("input", () => {
-        const event = new Event('value');
-        document.dispatchEvent(event);
+        const ev = new Event('value');
+        document.dispatchEvent(ev);
     });
     
-    // ----- Инициализация -----
+    // INIT
     sendBtn.addEventListener("click", sendMessage);
-    messageInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
-    
-    copyLinkBtn.addEventListener("click", () => {
+    messageInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+    copyBtn.addEventListener("click", () => {
         navigator.clipboard.writeText(window.location.href);
         showToast("◼ Ссылка скопирована");
     });
     
     loadTabs();
     loadUnread();
-    
     startGlobalListener();
     updateStatus();
     setInterval(updateStatus, 30000);
     
     window.addEventListener("beforeunload", () => {
-        set(ref(db, `users/${userId}`), {
-            username: currentUsername,
-            lastSeen: Date.now(),
-            online: false
-        });
+        set(ref(db, `users/${userId}`), { username, lastSeen: Date.now(), online: false });
     });
     
-    // Запрос имени
     setTimeout(() => {
-        if (currentUsername.startsWith("Гость_")) {
-            const name = prompt("Введите ваше имя:", currentUsername);
-            if (name && name.trim()) {
-                currentUsername = name.trim().slice(0, 24);
-                localStorage.setItem("fembo_username", currentUsername);
+        if (username.startsWith("Гость_")) {
+            const newName = prompt("Введите ваше имя:", username);
+            if (newName && newName.trim()) {
+                username = newName.trim().slice(0, 24);
+                localStorage.setItem("fembo_name", username);
                 updateStatus();
             }
         }
@@ -912,7 +702,7 @@
     
     renderTabs();
     
-    // Загружаем существующие личные чаты
+    // Load existing private chats
     setTimeout(() => {
         openTabs.forEach(tab => {
             if (tab.type === "private") {
