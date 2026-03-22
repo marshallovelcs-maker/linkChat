@@ -440,7 +440,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
-    const messagesRef = ref(db, "messages");
+    // ОТДЕЛЬНЫЕ ССЫЛКИ ДЛЯ РАЗНЫХ ТИПОВ СООБЩЕНИЙ
+    const globalMessagesRef = ref(db, "global_messages");
     
     const messagesArea = document.getElementById("messagesArea");
     const messageInput = document.getElementById("messageInput");
@@ -463,10 +464,8 @@
     let activeTabIndex = 0;
     let allUsers = new Map();
     
-    // Хранилище активных слушателей для каждого чата (ключ: "global" или "private_${userId}")
+    // Хранилище слушателей для каждого чата
     let activeListeners = new Map();
-    // Хранилище загруженных сообщений для каждого чата
-    let loadedMessages = new Map();
     
     function showNamePrompt() {
         const name = prompt("Введите ваше имя:", currentUsername);
@@ -585,6 +584,15 @@
     }
     
     function switchToTab(index) {
+        // Отключаем текущий слушатель
+        if (currentChat) {
+            const currentKey = currentChat.type === "global" ? "global" : `private_${currentChat.id}`;
+            const currentListener = activeListeners.get(currentKey);
+            if (currentListener) {
+                off(currentListener.queryRef, 'child_added', currentListener.callback);
+            }
+        }
+        
         activeTabIndex = index;
         currentChat = openTabs[index];
         renderTabs();
@@ -593,40 +601,29 @@
         messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
         
         // Загружаем сообщения для выбранного чата
-        loadMessagesForChat(currentChat);
+        loadChatMessages(currentChat);
     }
     
-    function getChatPath(chat) {
-        if (chat.type === "global") {
-            return { ref: messagesRef, path: "messages" };
-        } else {
-            const chatId = [userId, chat.id].sort().join('_');
-            return { ref: ref(db, `private_messages/${chatId}`), path: `private_messages/${chatId}` };
-        }
-    }
-    
-    function loadMessagesForChat(chat) {
+    function loadChatMessages(chat) {
         const chatKey = chat.type === "global" ? "global" : `private_${chat.id}`;
         
-        // Если уже есть слушатель для этого чата, не создаем новый
+        // Проверяем, есть ли уже слушатель
         if (activeListeners.has(chatKey)) {
-            // Просто показываем уже загруженные сообщения
-            const messages = loadedMessages.get(chatKey) || [];
-            if (messages.length === 0 && messagesArea.children.length <= 1) {
-                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
-            } else {
-                // Очищаем и перерисовываем
-                messagesArea.innerHTML = '';
-                messages.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.isOwn);
-                });
-            }
-            scrollToBottom();
+            // Если есть, просто показываем сообщения (они уже в кэше)
             return;
         }
         
-        const { ref: messagesQuery } = getChatPath(chat);
-        const limitedQuery = query(messagesQuery, limitToLast(100));
+        let messagesQuery;
+        
+        if (chat.type === "global") {
+            // ТОЛЬКО глобальные сообщения
+            messagesQuery = query(globalMessagesRef, limitToLast(100));
+        } else {
+            // ТОЛЬКО личные сообщения между двумя пользователями
+            const chatId = [userId, chat.id].sort().join('_');
+            messagesQuery = query(ref(db, `private_messages/${chatId}`), limitToLast(100));
+        }
+        
         const processedIds = new Set();
         const messagesList = [];
         
@@ -634,14 +631,11 @@
             const data = snapshot.val();
             const messageId = snapshot.key;
             
-            // Проверяем, не обрабатывали ли уже это сообщение
             if (processedIds.has(messageId)) return;
             processedIds.add(messageId);
             
             if (data && data.username && data.text) {
-                const isOwn = chat.type === "global" 
-                    ? (data.userId === userId)
-                    : (data.fromId === userId);
+                const isOwn = (data.userId === userId);
                 
                 messagesList.push({
                     id: messageId,
@@ -654,15 +648,7 @@
                 // Сортируем по времени
                 messagesList.sort((a, b) => a.timestamp - b.timestamp);
                 
-                // Сохраняем в кэш
-                loadedMessages.set(chatKey, messagesList.map(m => ({
-                    username: m.username,
-                    text: m.text,
-                    timestamp: m.timestamp,
-                    isOwn: m.isOwn
-                })));
-                
-                // Перерисовываем всю область сообщений
+                // Перерисовываем
                 messagesArea.innerHTML = '';
                 messagesList.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.isOwn);
@@ -671,11 +657,10 @@
             }
         };
         
-        // Сохраняем слушатель
-        const listener = onChildAdded(limitedQuery, callback);
-        activeListeners.set(chatKey, { queryRef: limitedQuery, callback, processedIds });
+        const listener = onChildAdded(messagesQuery, callback);
+        activeListeners.set(chatKey, { queryRef: messagesQuery, callback, processedIds, messagesList });
         
-        // Если через 2 секунды нет сообщений, показываем пустой чат
+        // Если через 2 секунды нет сообщений
         setTimeout(() => {
             if (messagesList.length === 0 && messagesArea.children.length <= 1) {
                 messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
@@ -739,16 +724,14 @@
         lastSendTime = now;
         
         const username = currentUsername.trim() || "Аноним";
-        const messageId = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
         
         if (currentChat.type === "global") {
-            // Отправляем в общий чат
-            push(messagesRef, {
+            // Отправляем в глобальный чат
+            push(globalMessagesRef, {
                 username: username,
                 text: text,
                 timestamp: Date.now(),
-                userId: userId,
-                messageId: messageId
+                userId: userId
             }).catch(error => {
                 console.error("Ошибка:", error);
                 showToast("◼ Ошибка отправки");
@@ -764,7 +747,7 @@
                 timestamp: Date.now(),
                 fromId: userId,
                 toId: currentChat.id,
-                messageId: messageId
+                userId: userId
             }).catch(error => {
                 console.error("Ошибка:", error);
                 showToast("◼ Ошибка отправки");
@@ -782,25 +765,21 @@
         const tabToClose = openTabs[index];
         const chatKey = `private_${tabToClose.id}`;
         
-        // Останавливаем слушатель для закрываемого чата
+        // Останавливаем слушатель
         const listenerInfo = activeListeners.get(chatKey);
         if (listenerInfo) {
             off(listenerInfo.queryRef, 'child_added', listenerInfo.callback);
             activeListeners.delete(chatKey);
         }
         
-        // Удаляем кэш сообщений
-        loadedMessages.delete(chatKey);
-        
         // Удаляем вкладку
         openTabs.splice(index, 1);
         
-        // Если закрыли активную вкладку, переключаемся на другую
         if (activeTabIndex === index) {
             activeTabIndex = Math.max(0, openTabs.length - 1);
             currentChat = openTabs[activeTabIndex];
             renderTabs();
-            loadMessagesForChat(currentChat);
+            loadChatMessages(currentChat);
         } else if (activeTabIndex > index) {
             activeTabIndex--;
             renderTabs();
@@ -849,7 +828,7 @@
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
     
     // Загружаем общий чат
-    loadMessagesForChat(openTabs[0]);
+    loadChatMessages(openTabs[0]);
 </script>
 </body>
 </html>
