@@ -440,7 +440,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
-    // ОТДЕЛЬНЫЕ ССЫЛКИ ДЛЯ РАЗНЫХ ТИПОВ СООБЩЕНИЙ
+    // Четкое разделение: общий чат в одной папке, личные в другой
     const globalMessagesRef = ref(db, "global_messages");
     
     const messagesArea = document.getElementById("messagesArea");
@@ -464,8 +464,9 @@
     let activeTabIndex = 0;
     let allUsers = new Map();
     
-    // Хранилище слушателей для каждого чата
-    let activeListeners = new Map();
+    // Хранилище активных слушателей
+    let activeGlobalListener = null;
+    let activePrivateListeners = new Map(); // key: userId, value: { queryRef, callback }
     
     function showNamePrompt() {
         const name = prompt("Введите ваше имя:", currentUsername);
@@ -500,11 +501,13 @@
             for (let id in users) {
                 const user = users[id];
                 const isOnline = (now - (user.lastSeen || 0) < 120000);
-                allUsers.set(id, {
-                    name: user.username,
-                    online: isOnline,
-                    lastSeen: user.lastSeen
-                });
+                if (id !== userId) {
+                    allUsers.set(id, {
+                        name: user.username,
+                        online: isOnline,
+                        lastSeen: user.lastSeen
+                    });
+                }
             }
         }
         renderUsersList();
@@ -513,7 +516,7 @@
     function renderUsersList() {
         const searchTerm = searchInput.value.toLowerCase();
         const users = Array.from(allUsers.entries())
-            .filter(([id, data]) => id !== userId && data.name.toLowerCase().includes(searchTerm))
+            .filter(([id, data]) => data.name.toLowerCase().includes(searchTerm))
             .sort((a, b) => {
                 if (a[1].online !== b[1].online) return b[1].online ? 1 : -1;
                 return a[1].name.localeCompare(b[1].name);
@@ -584,14 +587,8 @@
     }
     
     function switchToTab(index) {
-        // Отключаем текущий слушатель
-        if (currentChat) {
-            const currentKey = currentChat.type === "global" ? "global" : `private_${currentChat.id}`;
-            const currentListener = activeListeners.get(currentKey);
-            if (currentListener) {
-                off(currentListener.queryRef, 'child_added', currentListener.callback);
-            }
-        }
+        // Останавливаем текущий слушатель
+        stopCurrentListener();
         
         activeTabIndex = index;
         currentChat = openTabs[index];
@@ -601,35 +598,52 @@
         messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
         
         // Загружаем сообщения для выбранного чата
-        loadChatMessages(currentChat);
+        loadCurrentChatMessages();
     }
     
-    function loadChatMessages(chat) {
-        const chatKey = chat.type === "global" ? "global" : `private_${chat.id}`;
-        
-        // Проверяем, есть ли уже слушатель
-        if (activeListeners.has(chatKey)) {
-            // Если есть, просто показываем сообщения (они уже в кэше)
+    function stopCurrentListener() {
+        if (currentChat.type === "global") {
+            if (activeGlobalListener) {
+                off(activeGlobalListener.queryRef, 'child_added', activeGlobalListener.callback);
+                activeGlobalListener = null;
+            }
+        } else {
+            const listener = activePrivateListeners.get(currentChat.id);
+            if (listener) {
+                off(listener.queryRef, 'child_added', listener.callback);
+                activePrivateListeners.delete(currentChat.id);
+            }
+        }
+    }
+    
+    function loadCurrentChatMessages() {
+        if (currentChat.type === "global") {
+            loadGlobalMessages();
+        } else {
+            loadPrivateMessages(currentChat.id);
+        }
+    }
+    
+    function loadGlobalMessages() {
+        // Проверяем, есть ли уже активный слушатель для глобального чата
+        if (activeGlobalListener) {
+            // Если есть, просто показываем сообщения
             return;
         }
         
-        let messagesQuery;
-        
-        if (chat.type === "global") {
-            // ТОЛЬКО глобальные сообщения
-            messagesQuery = query(globalMessagesRef, limitToLast(100));
-        } else {
-            // ТОЛЬКО личные сообщения между двумя пользователями
-            const chatId = [userId, chat.id].sort().join('_');
-            messagesQuery = query(ref(db, `private_messages/${chatId}`), limitToLast(100));
-        }
-        
+        const messagesQuery = query(globalMessagesRef, limitToLast(100));
         const processedIds = new Set();
         const messagesList = [];
         
         const callback = (snapshot) => {
             const data = snapshot.val();
             const messageId = snapshot.key;
+            
+            // ВАЖНО: проверяем, что это глобальное сообщение (нет поля toId)
+            if (data.toId) {
+                // Это личное сообщение — пропускаем
+                return;
+            }
             
             if (processedIds.has(messageId)) return;
             processedIds.add(messageId);
@@ -645,7 +659,6 @@
                     isOwn: isOwn
                 });
                 
-                // Сортируем по времени
                 messagesList.sort((a, b) => a.timestamp - b.timestamp);
                 
                 // Перерисовываем
@@ -657,10 +670,59 @@
             }
         };
         
-        const listener = onChildAdded(messagesQuery, callback);
-        activeListeners.set(chatKey, { queryRef: messagesQuery, callback, processedIds, messagesList });
+        activeGlobalListener = { queryRef: messagesQuery, callback };
+        onChildAdded(messagesQuery, callback);
         
-        // Если через 2 секунды нет сообщений
+        setTimeout(() => {
+            if (messagesList.length === 0 && messagesArea.children.length <= 1) {
+                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
+            }
+        }, 2000);
+    }
+    
+    function loadPrivateMessages(targetUserId) {
+        // Проверяем, есть ли уже активный слушатель для этого личного чата
+        if (activePrivateListeners.has(targetUserId)) {
+            return;
+        }
+        
+        const chatId = [userId, targetUserId].sort().join('_');
+        const privateChatRef = ref(db, `private_messages/${chatId}`);
+        const messagesQuery = query(privateChatRef, limitToLast(100));
+        const processedIds = new Set();
+        const messagesList = [];
+        
+        const callback = (snapshot) => {
+            const data = snapshot.val();
+            const messageId = snapshot.key;
+            
+            if (processedIds.has(messageId)) return;
+            processedIds.add(messageId);
+            
+            if (data && data.username && data.text) {
+                const isOwn = (data.fromId === userId);
+                
+                messagesList.push({
+                    id: messageId,
+                    username: data.username,
+                    text: data.text,
+                    timestamp: data.timestamp,
+                    isOwn: isOwn
+                });
+                
+                messagesList.sort((a, b) => a.timestamp - b.timestamp);
+                
+                messagesArea.innerHTML = '';
+                messagesList.forEach(msg => {
+                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.isOwn);
+                });
+                scrollToBottom();
+            }
+        };
+        
+        activePrivateListeners.set(targetUserId, { queryRef: messagesQuery, callback });
+        onChildAdded(messagesQuery, callback);
+        
         setTimeout(() => {
             if (messagesList.length === 0 && messagesArea.children.length <= 1) {
                 messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
@@ -726,19 +788,20 @@
         const username = currentUsername.trim() || "Аноним";
         
         if (currentChat.type === "global") {
-            // Отправляем в глобальный чат
+            // Отправляем в глобальный чат (без toId!)
             push(globalMessagesRef, {
                 username: username,
                 text: text,
                 timestamp: Date.now(),
-                userId: userId
+                userId: userId,
+                type: "global"
             }).catch(error => {
                 console.error("Ошибка:", error);
                 showToast("◼ Ошибка отправки");
                 lastSendTime = 0;
             });
         } else {
-            // Отправляем в личный чат
+            // Отправляем в личный чат (с toId!)
             const chatId = [userId, currentChat.id].sort().join('_');
             const privateChatRef = ref(db, `private_messages/${chatId}`);
             push(privateChatRef, {
@@ -747,7 +810,7 @@
                 timestamp: Date.now(),
                 fromId: userId,
                 toId: currentChat.id,
-                userId: userId
+                type: "private"
             }).catch(error => {
                 console.error("Ошибка:", error);
                 showToast("◼ Ошибка отправки");
@@ -763,13 +826,12 @@
         if (openTabs[index].type === "global") return;
         
         const tabToClose = openTabs[index];
-        const chatKey = `private_${tabToClose.id}`;
         
-        // Останавливаем слушатель
-        const listenerInfo = activeListeners.get(chatKey);
-        if (listenerInfo) {
-            off(listenerInfo.queryRef, 'child_added', listenerInfo.callback);
-            activeListeners.delete(chatKey);
+        // Останавливаем слушатель для закрываемого чата
+        const listener = activePrivateListeners.get(tabToClose.id);
+        if (listener) {
+            off(listener.queryRef, 'child_added', listener.callback);
+            activePrivateListeners.delete(tabToClose.id);
         }
         
         // Удаляем вкладку
@@ -779,7 +841,7 @@
             activeTabIndex = Math.max(0, openTabs.length - 1);
             currentChat = openTabs[activeTabIndex];
             renderTabs();
-            loadChatMessages(currentChat);
+            loadCurrentChatMessages();
         } else if (activeTabIndex > index) {
             activeTabIndex--;
             renderTabs();
@@ -828,7 +890,7 @@
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
     
     // Загружаем общий чат
-    loadChatMessages(openTabs[0]);
+    loadGlobalMessages();
 </script>
 </body>
 </html>
