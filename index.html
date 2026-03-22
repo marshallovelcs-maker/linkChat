@@ -481,69 +481,71 @@
     let currentUsername = localStorage.getItem("fembo_username") || "Гость_" + Math.floor(Math.random() * 1000);
     
     let currentChat = { type: "global", id: null, name: "Общий чат" };
-    let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
+    let openTabs = [];
     let activeTabIndex = 0;
     let allUsers = new Map();
     
-    // Хранилище активных слушателей
+    // Хранилище
     let activePrivateListeners = new Map();
     let globalListenerActive = false;
-    
-    // Хранилище непрочитанных сообщений (просто счетчики)
     let unreadMessages = new Map();
-    const UNREAD_STORAGE_KEY = "fembo_unread_counts";
     
-    // Загрузка счетчиков из localStorage
-    function loadUnreadCounts() {
+    // Ключи для localStorage
+    const OPEN_TABS_KEY = "fembo_open_tabs";
+    const UNREAD_KEY = "fembo_unread";
+    
+    // Сохранение открытых вкладок
+    function saveOpenTabs() {
+        const tabsToSave = openTabs.filter(tab => tab.type === "private").map(tab => ({
+            id: tab.id,
+            name: tab.name
+        }));
+        localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(tabsToSave));
+    }
+    
+    // Загрузка открытых вкладок
+    function loadOpenTabs() {
         try {
-            const saved = localStorage.getItem(UNREAD_STORAGE_KEY);
+            const saved = localStorage.getItem(OPEN_TABS_KEY);
             if (saved) {
-                const parsed = JSON.parse(saved);
-                unreadMessages.clear();
-                Object.entries(parsed).forEach(([key, value]) => {
-                    unreadMessages.set(key, value);
+                const tabs = JSON.parse(saved);
+                openTabs = [{ type: "global", id: null, name: "Общий чат" }];
+                tabs.forEach(tab => {
+                    openTabs.push({
+                        type: "private",
+                        id: tab.id,
+                        name: tab.name
+                    });
                 });
-                console.log("📦 Загружены счетчики:", Array.from(unreadMessages.entries()));
+            } else {
+                openTabs = [{ type: "global", id: null, name: "Общий чат" }];
             }
-        } catch (e) {}
-    }
-    
-    // Сохранение счетчиков
-    function saveUnreadCounts() {
-        try {
-            const obj = {};
-            unreadMessages.forEach((value, key) => {
-                obj[key] = value;
-            });
-            localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify(obj));
-        } catch (e) {}
-    }
-    
-    // Увеличение счетчика
-    function incrementUnread(chatId, senderName) {
-        const key = `private_${chatId}`;
-        const current = unreadMessages.get(key) || 0;
-        unreadMessages.set(key, current + 1);
-        saveUnreadCounts();
-        
-        // Обновляем отображение вкладки
-        renderTabs();
-        showToast(`📩 Новое сообщение от ${senderName}`);
-    }
-    
-    // Сброс счетчика
-    function clearUnread(chatId) {
-        const key = `private_${chatId}`;
-        if (unreadMessages.has(key)) {
-            unreadMessages.delete(key);
-            saveUnreadCounts();
-            renderTabs();
+        } catch (e) {
+            openTabs = [{ type: "global", id: null, name: "Общий чат" }];
         }
     }
     
-    // Получение счетчика
-    function getUnreadCount(chatId) {
-        return unreadMessages.get(`private_${chatId}`) || 0;
+    // Сохранение непрочитанных
+    function saveUnread() {
+        const obj = {};
+        unreadMessages.forEach((value, key) => {
+            obj[key] = value;
+        });
+        localStorage.setItem(UNREAD_KEY, JSON.stringify(obj));
+    }
+    
+    // Загрузка непрочитанных
+    function loadUnread() {
+        try {
+            const saved = localStorage.getItem(UNREAD_KEY);
+            if (saved) {
+                const obj = JSON.parse(saved);
+                unreadMessages.clear();
+                Object.entries(obj).forEach(([key, value]) => {
+                    unreadMessages.set(key, value);
+                });
+            }
+        } catch (e) {}
     }
     
     function showToast(text) {
@@ -561,7 +563,7 @@
     
     function renderTabs() {
         tabsContainer.innerHTML = openTabs.map((tab, index) => {
-            const unreadCount = tab.type === "private" ? getUnreadCount(tab.id) : 0;
+            const unreadCount = tab.type === "private" ? (unreadMessages.get(tab.id) || 0) : 0;
             const isBlinking = unreadCount > 0 && index !== activeTabIndex;
             
             return `
@@ -586,31 +588,7 @@
         });
     }
     
-    function addPrivateChat(senderId, senderName, showNotification = true) {
-        const existingIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === senderId);
-        
-        if (existingIndex !== -1) {
-            if (existingIndex !== activeTabIndex && showNotification) {
-                incrementUnread(senderId, senderName);
-            }
-            return;
-        }
-        
-        openTabs.push({
-            type: "private",
-            id: senderId,
-            name: senderName
-        });
-        
-        if (showNotification) {
-            incrementUnread(senderId, senderName);
-        }
-        
-        renderTabs();
-    }
-    
     function switchToTab(index) {
-        // Останавливаем текущий слушатель
         if (currentChat.type === "private") {
             const listener = activePrivateListeners.get(currentChat.id);
             if (listener) {
@@ -621,7 +599,10 @@
         
         const newChat = openTabs[index];
         if (newChat.type === "private") {
-            clearUnread(newChat.id);
+            if (unreadMessages.has(newChat.id)) {
+                unreadMessages.delete(newChat.id);
+                saveUnread();
+            }
         }
         
         activeTabIndex = index;
@@ -634,6 +615,70 @@
             loadGlobalMessages();
         } else {
             loadPrivateMessages(currentChat.id);
+        }
+    }
+    
+    function addPrivateChat(senderId, senderName, incrementUnreadFlag = true) {
+        const existingIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === senderId);
+        
+        if (existingIndex !== -1) {
+            if (incrementUnreadFlag && existingIndex !== activeTabIndex) {
+                const current = unreadMessages.get(senderId) || 0;
+                unreadMessages.set(senderId, current + 1);
+                saveUnread();
+                renderTabs();
+                showToast(`📩 Новое сообщение от ${senderName}`);
+            }
+            return;
+        }
+        
+        openTabs.push({
+            type: "private",
+            id: senderId,
+            name: senderName
+        });
+        
+        if (incrementUnreadFlag) {
+            unreadMessages.set(senderId, 1);
+            saveUnread();
+            showToast(`📩 Новое сообщение от ${senderName} (добавлена вкладка)`);
+        }
+        
+        saveOpenTabs();
+        renderTabs();
+    }
+    
+    function closeTab(index) {
+        if (openTabs[index].type === "global") return;
+        
+        const tabToClose = openTabs[index];
+        
+        const listener = activePrivateListeners.get(tabToClose.id);
+        if (listener) {
+            off(listener.queryRef, 'child_added', listener.callback);
+            activePrivateListeners.delete(tabToClose.id);
+        }
+        
+        unreadMessages.delete(tabToClose.id);
+        saveUnread();
+        
+        openTabs.splice(index, 1);
+        saveOpenTabs();
+        
+        if (activeTabIndex === index) {
+            activeTabIndex = Math.max(0, openTabs.length - 1);
+            currentChat = openTabs[activeTabIndex];
+            renderTabs();
+            if (currentChat.type === "global") {
+                loadGlobalMessages();
+            } else {
+                loadPrivateMessages(currentChat.id);
+            }
+        } else if (activeTabIndex > index) {
+            activeTabIndex--;
+            renderTabs();
+        } else {
+            renderTabs();
         }
     }
     
@@ -709,22 +754,29 @@
         }, 1000);
     }
     
-    // ГЛАВНЫЙ СЛУШАТЕЛЬ ДЛЯ УВЕДОМЛЕНИЙ
+    // ГЛАВНЫЙ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ
     function setupNotificationListener() {
         console.log("🔔 Запуск слушателя уведомлений...");
         
-        // Слушаем все приватные сообщения
         const privateMessagesRef = ref(db, "private_messages");
         
         onChildAdded(privateMessagesRef, (snapshot) => {
             const data = snapshot.val();
             
-            // Проверяем, что сообщение адресовано текущему пользователю и не от него
             if (data && data.toId === userId && data.fromId !== userId) {
-                console.log("📨 НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от:", data.username);
+                console.log("📨 НОВОЕ СООБЩЕНИЕ от:", data.username);
                 
-                // Добавляем или обновляем вкладку
-                addPrivateChat(data.fromId, data.username, true);
+                // Проверяем, открыт ли этот чат и активен ли он
+                const isActive = (currentChat.type === "private" && currentChat.id === data.fromId);
+                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === data.fromId);
+                
+                if (isActive) {
+                    // Чат активен — просто показываем сообщение, не увеличиваем счетчик
+                    console.log("✅ Чат активен, сообщение отобразится автоматически");
+                } else {
+                    // Чат не активен — добавляем/обновляем вкладку с уведомлением
+                    addPrivateChat(data.fromId, data.username, true);
+                }
             }
         });
         
@@ -780,36 +832,6 @@
         
         addPrivateChat(targetUserId, targetUserName, false);
         switchToTab(openTabs.length - 1);
-    }
-    
-    function closeTab(index) {
-        if (openTabs[index].type === "global") return;
-        
-        const tabToClose = openTabs[index];
-        
-        const listener = activePrivateListeners.get(tabToClose.id);
-        if (listener) {
-            off(listener.queryRef, 'child_added', listener.callback);
-            activePrivateListeners.delete(tabToClose.id);
-        }
-        
-        openTabs.splice(index, 1);
-        
-        if (activeTabIndex === index) {
-            activeTabIndex = Math.max(0, openTabs.length - 1);
-            currentChat = openTabs[activeTabIndex];
-            renderTabs();
-            if (currentChat.type === "global") {
-                loadGlobalMessages();
-            } else {
-                loadPrivateMessages(currentChat.id);
-            }
-        } else if (activeTabIndex > index) {
-            activeTabIndex--;
-            renderTabs();
-        } else {
-            renderTabs();
-        }
     }
     
     let lastSendTime = 0;
@@ -963,33 +985,23 @@
     
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
     
-    // Загружаем сохраненные счетчики
-    loadUnreadCounts();
+    // Загружаем сохраненные данные
+    loadOpenTabs();
+    loadUnread();
     
-    // ЗАПУСКАЕМ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ
+    // Запускаем слушатель
     setupNotificationListener();
     
     // Загружаем общий чат
     loadGlobalMessages();
     
-    // Восстанавливаем вкладки из сохраненных счетчиков
-    setTimeout(() => {
-        const unreadKeys = Array.from(unreadMessages.keys());
-        unreadKeys.forEach(key => {
-            const chatId = key.replace("private_", "");
-            const userData = allUsers.get(chatId);
-            if (userData && !openTabs.some(tab => tab.type === "private" && tab.id === chatId)) {
-                openTabs.push({
-                    type: "private",
-                    id: chatId,
-                    name: userData.name
-                });
-            }
-        });
-        if (openTabs.length > 1) {
-            renderTabs();
-        }
-    }, 2000);
+    // Рендерим вкладки
+    renderTabs();
+    
+    // Если есть сохраненная активная вкладка, загружаем её
+    if (openTabs.length > 1 && openTabs[activeTabIndex].type !== "global") {
+        loadPrivateMessages(openTabs[activeTabIndex].id);
+    }
 </script>
 </body>
 </html>
