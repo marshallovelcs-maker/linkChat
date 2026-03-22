@@ -299,6 +299,7 @@
     // Listeners
     let globalListener = null;
     let privateListeners = new Map();
+    let globalPrivateListener = null;
     
     // Save/Load
     function saveTabs() {
@@ -518,7 +519,7 @@
         });
     }
     
-    // Личный чат (история и уведомления)
+    // Личный чат (история)
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
         
@@ -550,43 +551,8 @@
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
             
-            // Проверяем, нужно ли показать уведомление
-            const isForMe = data.toId === userId;
-            const isNotFromMe = data.fromId !== userId;
-            const lastRead = lastReadTime.get(targetId) || 0;
-            const isNew = data.timestamp > lastRead;
-            const isActive = (currentChat.type === "private" && currentChat.id === targetId);
-            
-            if (isForMe && isNotFromMe && isNew) {
-                // Увеличиваем счетчик непрочитанных (он будет считаться через getUnreadCount)
-                renderTabs();
-                showToast(`💬 Новое сообщение от ${data.username}`);
-                
-                // Если вкладки нет - добавляем
-                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === targetId);
-                if (!isTabOpen) {
-                    openTabs.push({ type: "private", id: targetId, name: data.username });
-                    saveTabs();
-                    renderTabs();
-                }
-                
-                // Системное сообщение в общий чат
-                if (currentChat.type === "global") {
-                    const sysDiv = document.createElement("div");
-                    sysDiv.className = "system";
-                    sysDiv.style.background = "#2a5a2a";
-                    sysDiv.style.color = "#ffaa33";
-                    sysDiv.style.border = "1px solid #ffaa33";
-                    sysDiv.style.padding = "0.5rem";
-                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(data.username)}! Нажмите на вкладку "${escapeHtml(data.username)}" чтобы прочитать.`;
-                    messagesArea.appendChild(sysDiv);
-                    messagesArea.scrollTop = messagesArea.scrollHeight;
-                    setTimeout(() => sysDiv.remove(), 8000);
-                }
-            }
-            
             // Если чат активен, обновляем UI
-            if (isActive) {
+            if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
@@ -599,6 +565,91 @@
         
         onChildAdded(chatQuery, callback);
         privateListeners.set(targetId, { ref: chatQuery, callback });
+    }
+    
+    // ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ ДЛЯ НОВЫХ ЛИЧНЫХ СООБЩЕНИЙ (создает вкладки)
+    function startGlobalPrivateListener() {
+        if (globalPrivateListener) return;
+        
+        console.log("🔔 Запуск глобального слушателя личных сообщений");
+        
+        const privateMessagesRef = ref(db, "private_messages");
+        
+        globalPrivateListener = onChildAdded(privateMessagesRef, (snapshot) => {
+            const data = snapshot.val();
+            if (!data || !data.text) return;
+            
+            // Проверяем, это сообщение для текущего пользователя и не от себя
+            if (data.toId === userId && data.fromId !== userId) {
+                const senderId = data.fromId;
+                const senderName = data.username;
+                const msgTime = data.timestamp;
+                
+                console.log(`📨 НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${senderName}`);
+                
+                // Добавляем сообщение в кэш
+                if (!privateMessages.has(senderId)) {
+                    privateMessages.set(senderId, []);
+                    privateMessageIds.set(senderId, new Set());
+                }
+                
+                const msgs = privateMessages.get(senderId);
+                const msgIdsSet = privateMessageIds.get(senderId);
+                const msgId = snapshot.key;
+                
+                if (!msgIdsSet.has(msgId)) {
+                    msgIdsSet.add(msgId);
+                    msgs.push({
+                        id: msgId,
+                        username: data.username,
+                        text: data.text,
+                        timestamp: data.timestamp,
+                        fromId: data.fromId,
+                        toId: data.toId
+                    });
+                    msgs.sort((a, b) => a.timestamp - b.timestamp);
+                    privateMessages.set(senderId, msgs);
+                }
+                
+                // Проверяем, открыта ли вкладка
+                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
+                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
+                const lastRead = lastReadTime.get(senderId) || 0;
+                const isNew = msgTime > lastRead;
+                
+                if (!isTabOpen) {
+                    // СОЗДАЕМ НОВУЮ ВКЛАДКУ
+                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
+                    openTabs.push({ type: "private", id: senderId, name: senderName });
+                    saveTabs();
+                    renderTabs();
+                    
+                    // ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ
+                    showToast(`💬 Новое сообщение от ${senderName}`);
+                    
+                    // СИСТЕМНОЕ СООБЩЕНИЕ В ОБЩИЙ ЧАТ
+                    if (currentChat.type === "global") {
+                        const sysDiv = document.createElement("div");
+                        sysDiv.className = "system";
+                        sysDiv.style.background = "#2a5a2a";
+                        sysDiv.style.color = "#ffaa33";
+                        sysDiv.style.border = "1px solid #ffaa33";
+                        sysDiv.style.padding = "0.5rem";
+                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
+                        messagesArea.appendChild(sysDiv);
+                        messagesArea.scrollTop = messagesArea.scrollHeight;
+                        setTimeout(() => sysDiv.remove(), 8000);
+                    }
+                } else if (!isActive && isNew) {
+                    // Вкладка есть, но не активна - обновляем отображение
+                    console.log(`🔔 Обновляю счетчик для ${senderName}`);
+                    renderTabs();
+                    showToast(`💬 Новое сообщение от ${senderName}`);
+                }
+            }
+        });
+        
+        console.log("✅ Глобальный слушатель запущен");
     }
     
     // Отправка сообщения
@@ -698,6 +749,7 @@
     loadTabs();
     loadLastRead();
     startGlobalListener();
+    startGlobalPrivateListener(); // ВАЖНО: запускаем глобальный слушатель для создания вкладок
     updateStatus();
     setInterval(updateStatus, 30000);
     
@@ -729,6 +781,7 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
+    console.log("🔔 Глобальный слушатель активен - новые сообщения будут создавать вкладки");
 </script>
 </body>
 </html>
