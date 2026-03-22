@@ -32,7 +32,6 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
-        /* Боковая панель */
         .sidebar {
             width: 280px;
             background: #000000;
@@ -131,7 +130,6 @@
             background: #2a2a2a;
         }
 
-        /* Основная область */
         .main-area {
             flex: 1;
             display: flex;
@@ -181,7 +179,6 @@
             background: #3a3a3a;
         }
 
-        /* Вкладки */
         .tabs {
             display: flex;
             background: #0a0a0a;
@@ -381,7 +378,6 @@
 <body>
 
 <div class="chat-container">
-    <!-- Боковая панель с пользователями -->
     <div class="sidebar">
         <div class="sidebar-header">
             <h3>◼ Пользователи</h3>
@@ -392,7 +388,6 @@
         </div>
     </div>
 
-    <!-- Основная область -->
     <div class="main-area">
         <div class="chat-header">
             <div class="brand">
@@ -402,17 +397,14 @@
             <button class="copy-link-btn" id="copyLinkButton">⎘ Поделиться</button>
         </div>
 
-        <!-- Вкладки -->
         <div class="tabs" id="tabsContainer">
             <div class="tab active" data-chat="global"># Общий чат</div>
         </div>
 
-        <!-- Область сообщений -->
         <div class="messages-area" id="messagesArea">
             <div class="system-message">◼ Выберите чат или напишите сообщение в общий чат</div>
         </div>
 
-        <!-- Поле ввода -->
         <div class="input-area">
             <div class="message-input-wrapper">
                 <input type="text" id="messageInput" placeholder="Напишите сообщение..." maxlength="500">
@@ -450,7 +442,6 @@
     
     const messagesRef = ref(db, "messages");
     
-    // DOM элементы
     const messagesArea = document.getElementById("messagesArea");
     const messageInput = document.getElementById("messageInput");
     const sendBtn = document.getElementById("sendButton");
@@ -467,15 +458,18 @@
     
     let currentUsername = localStorage.getItem("fembo_username") || "Гость_" + Math.floor(Math.random() * 1000);
     
-    // Состояние чата
     let currentChat = { type: "global", id: null, name: "Общий чат" };
     let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
-    let allUsers = new Map(); // id -> { name, online, lastSeen }
+    let allUsers = new Map();
     let currentMessageListener = null;
-    let isSending = false; // Флаг для предотвращения дублирования
+    let processedMessageIds = new Set(); // Храним ID обработанных сообщений
     
-    // Модальное окно для ввода имени
+    // Генерация уникального ID для сообщения
+    function generateMessageId() {
+        return Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+    }
+    
     function showNamePrompt() {
         const name = prompt("Введите ваше имя:", currentUsername);
         if (name && name.trim()) {
@@ -501,7 +495,6 @@
         });
     }
     
-    // Отслеживание пользователей (включая оффлайн)
     onValue(ref(db, "users"), (snapshot) => {
         const users = snapshot.val();
         allUsers.clear();
@@ -509,7 +502,7 @@
             const now = Date.now();
             for (let id in users) {
                 const user = users[id];
-                const isOnline = (now - (user.lastSeen || 0) < 120000); // 2 минуты = онлайн
+                const isOnline = (now - (user.lastSeen || 0) < 120000);
                 allUsers.set(id, {
                     name: user.username,
                     online: isOnline,
@@ -525,7 +518,6 @@
         const users = Array.from(allUsers.entries())
             .filter(([id, data]) => id !== userId && data.name.toLowerCase().includes(searchTerm))
             .sort((a, b) => {
-                // Сначала онлайн, потом по имени
                 if (a[1].online !== b[1].online) return b[1].online ? 1 : -1;
                 return a[1].name.localeCompare(b[1].name);
             });
@@ -615,40 +607,53 @@
     
     function loadMessages() {
         // Отключаем старый слушатель
-        if (currentMessageListener) {
-            off(currentMessageListener.ref, 'child_added', currentMessageListener.callback);
+        if (currentMessageListener && currentMessageListener.off) {
+            currentMessageListener.off();
         }
+        
+        // Очищаем processedMessageIds при смене чата
+        processedMessageIds.clear();
         
         messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
         
         let messagesQuery;
+        let callback;
         
         if (currentChat.type === "global") {
             messagesQuery = query(messagesRef, limitToLast(100));
-            const callback = (snapshot) => {
+            callback = (snapshot) => {
                 const data = snapshot.val();
+                const messageId = snapshot.key;
+                
+                // Проверяем, не обрабатывали ли уже это сообщение
+                if (processedMessageIds.has(messageId)) return;
+                processedMessageIds.add(messageId);
+                
                 if (data && data.username && data.text) {
                     const isOwn = (data.userId === userId);
                     addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
                     clearLoadingMessage();
                 }
             };
-            currentMessageListener = { ref: messagesQuery, callback };
-            onChildAdded(messagesQuery, callback);
+            currentMessageListener = onChildAdded(messagesQuery, callback);
         } else {
             const chatId = [userId, currentChat.id].sort().join('_');
             const privateChatRef = ref(db, `private_messages/${chatId}`);
             messagesQuery = query(privateChatRef, limitToLast(100));
-            const callback = (snapshot) => {
+            callback = (snapshot) => {
                 const data = snapshot.val();
+                const messageId = snapshot.key;
+                
+                if (processedMessageIds.has(messageId)) return;
+                processedMessageIds.add(messageId);
+                
                 if (data && data.username && data.text) {
                     const isOwn = (data.fromId === userId);
                     addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
                     clearLoadingMessage();
                 }
             };
-            currentMessageListener = { ref: messagesQuery, callback };
-            onChildAdded(messagesQuery, callback);
+            currentMessageListener = onChildAdded(messagesQuery, callback);
         }
         
         function clearLoadingMessage() {
@@ -699,24 +704,36 @@
         });
     }
     
+    // Блокировка повторной отправки
+    let lastSendTime = 0;
+    const SEND_DELAY = 500; // 500ms задержка между отправками
+    
     function sendMessage() {
-        if (isSending) return;
-        
         const text = messageInput.value.trim();
         if (!text) return;
         
-        isSending = true;
+        const now = Date.now();
+        if (now - lastSendTime < SEND_DELAY) {
+            showToast("◼ Подождите перед отправкой следующего сообщения");
+            return;
+        }
+        
+        lastSendTime = now;
         
         const username = currentUsername.trim() || "Аноним";
+        const messageId = generateMessageId();
         
         if (currentChat.type === "global") {
             push(messagesRef, {
                 username: username,
                 text: text,
                 timestamp: Date.now(),
-                userId: userId
-            }).finally(() => {
-                isSending = false;
+                userId: userId,
+                messageId: messageId
+            }).catch(error => {
+                console.error("Ошибка:", error);
+                showToast("◼ Ошибка отправки");
+                lastSendTime = 0;
             });
         } else {
             const chatId = [userId, currentChat.id].sort().join('_');
@@ -726,9 +743,12 @@
                 text: text,
                 timestamp: Date.now(),
                 fromId: userId,
-                toId: currentChat.id
-            }).finally(() => {
-                isSending = false;
+                toId: currentChat.id,
+                messageId: messageId
+            }).catch(error => {
+                console.error("Ошибка:", error);
+                showToast("◼ Ошибка отправки");
+                lastSendTime = 0;
             });
         }
         
@@ -759,13 +779,9 @@
         }, 2000);
     }
     
-    // Обновление статуса (онлайн)
     updateUserStatus();
-    
-    // Обновляем статус каждые 30 секунд
     const statusInterval = setInterval(updateUserStatus, 30000);
     
-    // При закрытии вкладки — помечаем как оффлайн (но не удаляем)
     window.addEventListener("beforeunload", () => {
         clearInterval(statusInterval);
         const userStatusRef = ref(db, `users/${userId}`);
@@ -778,8 +794,6 @@
     });
     
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
-    
-    // Загружаем общий чат по умолчанию
     loadMessages();
 </script>
 </body>
