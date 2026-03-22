@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>LinkChat — Глобальный чат по ссылке</title>
+    <title>LinkChat — Черно-белый чат</title>
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
 
         body {
             font-family: system-ui, 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b2e 100%);
+            background: #1a1a1a;
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -26,20 +26,17 @@
             width: 100%;
             height: 90vh;
             min-height: 550px;
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(10px);
-            border-radius: 2rem;
-            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+            background: #0a0a0a;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
         .chat-header {
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(12px);
+            background: #000000;
             padding: 1rem 1.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid #2a2a2a;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -56,41 +53,37 @@
 
         .brand h1 {
             font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #e0e7ff, #a78bfa);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
+            font-weight: 600;
+            color: #ffffff;
+            letter-spacing: -0.5px;
         }
 
         .badge {
-            background: #2d3a5e;
+            background: #2a2a2a;
             padding: 0.25rem 0.8rem;
-            border-radius: 40px;
             font-size: 0.7rem;
-            color: #94a3b8;
+            color: #aaaaaa;
             font-family: monospace;
-            border: 1px solid #475569;
+            border: 1px solid #3a3a3a;
         }
 
         .online-badge {
-            background: #15803d;
-            color: #bbf7d0;
+            background: #1a3a1a;
+            color: #90ee90;
             padding: 0.25rem 0.8rem;
-            border-radius: 40px;
             font-size: 0.75rem;
             display: flex;
             align-items: center;
             gap: 6px;
+            border: 1px solid #2a5a2a;
         }
 
         .copy-link-btn {
-            background: #334155;
-            border: none;
-            color: #e2e8f0;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
             font-size: 0.85rem;
             padding: 0.5rem 1.2rem;
-            border-radius: 40px;
             cursor: pointer;
             font-weight: 500;
             transition: all 0.2s;
@@ -100,8 +93,8 @@
         }
 
         .copy-link-btn:hover {
-            background: #475569;
-            transform: translateY(-1px);
+            background: #3a3a3a;
+            border-color: #5a5a5a;
         }
 
         .messages-area {
@@ -110,15 +103,15 @@
             padding: 1.2rem 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 0.85rem;
+            gap: 1rem;
             scroll-behavior: smooth;
+            background: #0f0f0f;
         }
 
         .message {
             display: flex;
             flex-direction: column;
-            max-width: 80%;
-            animation: fadeSlideUp 0.2s ease-out;
+            max-width: 75%;
         }
 
         .message.own {
@@ -127,58 +120,62 @@
         }
 
         .message-bubble {
-            background: #1e293b;
-            padding: 0.7rem 1.2rem;
-            border-radius: 1.2rem;
-            border-bottom-left-radius: 0.3rem;
-            color: #e2e8f0;
+            background: #1e1e1e;
+            padding: 0.8rem 1.2rem;
+            color: #e0e0e0;
             word-break: break-word;
             font-size: 0.95rem;
             line-height: 1.45;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            border: 1px solid #2a2a2a;
         }
 
         .message.own .message-bubble {
-            background: linear-gradient(135deg, #3b4e8c, #2c3e6e);
-            border-bottom-right-radius: 0.3rem;
-            border-bottom-left-radius: 1.2rem;
-            color: white;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            color: #ffffff;
         }
 
-        .message-meta {
-            display: flex;
-            gap: 0.6rem;
+        .message-sender {
             font-size: 0.7rem;
-            margin: 0.2rem 0.5rem 0.2rem 0.5rem;
-            color: #7c8ba0;
+            color: #888888;
+            margin-top: 0.3rem;
+            padding: 0 0.2rem;
         }
 
-        .message.own .message-meta {
-            justify-content: flex-end;
+        .message.own .message-sender {
+            text-align: right;
         }
 
-        .username {
+        .sender-name {
             font-weight: 600;
-            color: #a5b4fc;
+            color: #aaaaaa;
+        }
+
+        .message.own .sender-name {
+            color: #cccccc;
+        }
+
+        .message-time {
+            color: #666666;
+            margin-left: 0.5rem;
         }
 
         .system-message {
             text-align: center;
             font-size: 0.75rem;
-            color: #8b9dc3;
-            background: rgba(15, 23, 42, 0.7);
+            color: #888888;
+            background: #111111;
             margin: 0.3rem auto;
-            padding: 0.3rem 1rem;
-            border-radius: 30px;
+            padding: 0.4rem 1rem;
             width: fit-content;
             max-width: 90%;
+            border: 1px solid #222222;
         }
 
         .input-area {
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(12px);
+            background: #0a0a0a;
             padding: 1rem 1.5rem 1.2rem;
-            border-top: 1px solid rgba(255,255,255,0.08);
+            border-top: 1px solid #1a1a1a;
             display: flex;
             gap: 0.75rem;
             align-items: center;
@@ -187,17 +184,16 @@
 
         .name-input-wrapper {
             display: flex;
-            background: #1e293b;
-            border-radius: 60px;
+            background: #111111;
             padding: 0.1rem 0.1rem 0.1rem 1rem;
             align-items: center;
             gap: 0.3rem;
             flex: 1 1 150px;
-            border: 1px solid #334155;
+            border: 1px solid #2a2a2a;
         }
 
         .name-input-wrapper span {
-            color: #7e8fb0;
+            color: #666666;
             font-size: 0.9rem;
         }
 
@@ -205,21 +201,20 @@
             background: transparent;
             border: none;
             padding: 0.7rem 0.2rem 0.7rem 0;
-            color: #f1f5f9;
+            color: #e0e0e0;
             font-size: 0.9rem;
             outline: none;
             width: 100%;
-            font-weight: 500;
+            font-weight: 400;
         }
 
         .message-input-wrapper {
             flex: 4;
             display: flex;
-            background: #1e293b;
-            border-radius: 60px;
+            background: #111111;
             align-items: center;
             padding: 0.2rem 0.2rem 0.2rem 1rem;
-            border: 1px solid #334155;
+            border: 1px solid #2a2a2a;
         }
 
         #messageInput {
@@ -227,18 +222,17 @@
             background: transparent;
             border: none;
             padding: 0.75rem 0.5rem;
-            color: #f1f5f9;
+            color: #e0e0e0;
             font-size: 0.95rem;
             outline: none;
         }
 
         button {
-            background: linear-gradient(135deg, #3b4e8c, #2c3e6e);
-            border: none;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
             padding: 0.7rem 1.5rem;
-            border-radius: 50px;
-            font-weight: 600;
-            color: white;
+            font-weight: 500;
+            color: #e0e0e0;
             cursor: pointer;
             transition: all 0.2s;
             font-size: 0.9rem;
@@ -248,37 +242,24 @@
         }
 
         button:active {
-            transform: scale(0.96);
+            transform: scale(0.97);
         }
 
         button:hover {
-            background: linear-gradient(135deg, #4f6aa3, #3b4e8c);
-            transform: translateY(-1px);
+            background: #2a2a2a;
+            border-color: #5a5a5a;
         }
 
         .messages-area::-webkit-scrollbar {
-            width: 5px;
+            width: 8px;
         }
 
         .messages-area::-webkit-scrollbar-track {
-            background: #0f172a;
-            border-radius: 10px;
+            background: #0a0a0a;
         }
 
         .messages-area::-webkit-scrollbar-thumb {
-            background: #475569;
-            border-radius: 10px;
-        }
-
-        @keyframes fadeSlideUp {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            background: #2a2a2a;
         }
 
         .toast-msg {
@@ -286,24 +267,19 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: #1e293b;
-            backdrop-filter: blur(12px);
-            color: #bbf0ff;
+            background: #000000;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
             padding: 0.6rem 1.5rem;
-            border-radius: 40px;
             font-size: 0.85rem;
             pointer-events: none;
             z-index: 999;
             transition: opacity 0.2s;
-            border: 1px solid #4f6aa3;
-            font-weight: 500;
-            white-space: nowrap;
         }
 
         @media (max-width: 600px) {
             .chat-container {
                 height: 95vh;
-                border-radius: 1.5rem;
             }
             .message {
                 max-width: 95%;
@@ -332,30 +308,30 @@
 <div class="chat-container">
     <div class="chat-header">
         <div class="brand">
-            <h1>✨ LinkChat</h1>
-            <div class="badge">глобальный чат</div>
+            <h1>◼ LinkChat</h1>
+            <div class="badge">black & white</div>
             <div class="online-badge" id="onlineStatus">
-                <span>🟢</span> <span id="onlineCount">0</span>
+                <span>●</span> <span id="onlineCount">0</span>
             </div>
         </div>
         <button class="copy-link-btn" id="copyLinkButton">
-            📋 Поделиться ссылкой
+            ⎘ Поделиться
         </button>
     </div>
 
     <div class="messages-area" id="messagesArea">
-        <div class="system-message">💬 Подключение к чату...</div>
+        <div class="system-message">◼ Подключение к чату...</div>
     </div>
 
     <div class="input-area">
         <div class="name-input-wrapper">
-            <span>👤</span>
+            <span>◼</span>
             <input type="text" id="usernameInput" placeholder="Ваше имя" maxlength="24" autocomplete="off">
         </div>
         <div class="message-input-wrapper">
             <input type="text" id="messageInput" placeholder="Напишите сообщение..." maxlength="500" autocomplete="off">
         </div>
-        <button id="sendButton">📨 Отправить</button>
+        <button id="sendButton">◼ Отправить</button>
     </div>
 </div>
 
@@ -363,8 +339,7 @@
     {
         "imports": {
             "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-            "firebase/database": "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js",
-            "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js"
+            "firebase/database": "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js"
         }
     }
 </script>
@@ -372,28 +347,21 @@
 <script type="module">
     import { initializeApp } from "firebase/app";
     import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, remove } from "firebase/database";
-    import { getAnalytics } from "firebase/analytics";
 
-    // Firebase конфигурация
     const firebaseConfig = {
         apiKey: "AIzaSyACbUMNMGOQLg-iCDVuceIcld7UJTayYqU",
         authDomain: "chat-f3029.firebaseapp.com",
+        databaseURL: "https://chat-f3029-default-rtdb.firebaseio.com",
         projectId: "chat-f3029",
         storageBucket: "chat-f3029.firebasestorage.app",
         messagingSenderId: "150747577754",
-        appId: "1:150747577754:web:fcaaa4d96efe1f8ad30e23",
-        measurementId: "G-3F8RPHMMS5"
+        appId: "1:150747577754:web:fcaaa4d96efe1f8ad30e23"
     };
 
-    // Инициализация Firebase
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
     const db = getDatabase(app);
-    
-    // Ссылки на данные
     const messagesRef = ref(db, "messages");
     
-    // DOM элементы
     const messagesArea = document.getElementById("messagesArea");
     const usernameInput = document.getElementById("usernameInput");
     const messageInput = document.getElementById("messageInput");
@@ -401,14 +369,12 @@
     const copyLinkBtn = document.getElementById("copyLinkButton");
     const onlineCountSpan = document.getElementById("onlineCount");
     
-    // Уникальный ID пользователя
     let userId = localStorage.getItem("linkchat_user_id");
     if (!userId) {
         userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 8);
         localStorage.setItem("linkchat_user_id", userId);
     }
     
-    // Имя пользователя
     let currentUsername = localStorage.getItem("linkchat_username") || "Гость_" + Math.floor(Math.random() * 1000);
     usernameInput.value = currentUsername;
     
@@ -419,36 +385,35 @@
         currentUsername = newName;
         localStorage.setItem("linkchat_username", currentUsername);
         
-        // Обновляем имя в статусе
         const userStatusRef = ref(db, `users/${userId}`);
         set(userStatusRef, {
             username: currentUsername,
             lastSeen: Date.now()
         });
         
-        addSystemMessage(`Вы сменили имя на ${currentUsername}`, "info");
+        addSystemMessage(`Вы сменили имя на ${currentUsername}`);
     });
     
-    // Добавление сообщения в DOM
     function addMessageToDOM(username, text, timestamp, isOwn = false) {
         const messageDiv = document.createElement("div");
         messageDiv.className = `message ${isOwn ? 'own' : ''}`;
         const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
         messageDiv.innerHTML = `
             <div class="message-bubble">${escapeHtml(text)}</div>
-            <div class="message-meta">
-                <span class="username">${escapeHtml(username)}</span>
-                <span>${timeStr}</span>
+            <div class="message-sender">
+                <span class="sender-name">${escapeHtml(username)}</span>
+                <span class="message-time">${timeStr}</span>
             </div>
         `;
         messagesArea.appendChild(messageDiv);
         scrollToBottom();
     }
     
-    function addSystemMessage(text, type = "info") {
+    function addSystemMessage(text) {
         const sysDiv = document.createElement("div");
         sysDiv.className = "system-message";
-        sysDiv.innerHTML = `💬 ${escapeHtml(text)}`;
+        sysDiv.innerHTML = `◼ ${escapeHtml(text)}`;
         messagesArea.appendChild(sysDiv);
         scrollToBottom();
     }
@@ -469,7 +434,6 @@
         });
     }
     
-    // Отправка сообщения
     function sendMessage() {
         const text = messageInput.value.trim();
         if (!text) return;
@@ -482,8 +446,8 @@
             timestamp: Date.now(),
             userId: userId
         }).catch(error => {
-            console.error("Ошибка отправки:", error);
-            addSystemMessage("❌ Ошибка отправки сообщения");
+            console.error("Ошибка:", error);
+            addSystemMessage("Ошибка отправки сообщения");
         });
         
         messageInput.value = "";
@@ -497,7 +461,7 @@
     
     copyLinkBtn.addEventListener("click", () => {
         navigator.clipboard.writeText(window.location.href);
-        showToast("✅ Ссылка скопирована! Поделитесь с друзьями.");
+        showToast("◼ Ссылка скопирована");
     });
     
     function showToast(text) {
@@ -510,10 +474,9 @@
         setTimeout(() => {
             div.style.opacity = "0";
             setTimeout(() => div.remove(), 300);
-        }, 3000);
+        }, 2000);
     }
     
-    // Загрузка последних 100 сообщений
     const recentQuery = query(messagesRef, limitToLast(100));
     
     let firstLoad = true;
@@ -531,7 +494,6 @@
         }
     });
     
-    // Статус онлайн
     const userStatusRef = ref(db, `users/${userId}`);
     set(userStatusRef, { username: currentUsername, lastSeen: Date.now() });
     
@@ -553,20 +515,15 @@
         }
     });
     
-    // Обновление статуса каждые 30 секунд
     setInterval(() => {
         set(userStatusRef, { username: currentUsername, lastSeen: Date.now() });
     }, 30000);
     
-    // Удаляем при закрытии
     window.addEventListener("beforeunload", () => {
         remove(userStatusRef);
     });
     
-    addSystemMessage(`👋 Добро пожаловать, ${currentUsername}! Чат работает глобально.`);
-    
-    // Проверка подключения
-    console.log("Firebase подключен, Analytics:", analytics);
+    addSystemMessage(`Добро пожаловать, ${currentUsername}`);
 </script>
 </body>
 </html>
