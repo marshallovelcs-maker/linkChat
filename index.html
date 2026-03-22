@@ -72,6 +72,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
         }
         .brand { display: flex; align-items: center; gap: 10px; }
         .logo { font-size: 24px; }
@@ -79,39 +81,35 @@
         .user-info {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             background: #1a1a1a;
-            padding: 0.3rem 1rem;
+            padding: 0.3rem 0.8rem;
             border-radius: 20px;
             border: 1px solid #3a3a3a;
         }
-        .user-info span:first-child { color: #888; font-size: 0.75rem; }
+        .user-info span:first-child { color: #888; font-size: 0.7rem; }
         .user-info .nickname {
             color: #ffaa66;
             font-weight: 600;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
         }
         .edit-name-btn {
             background: #2a2a2a;
             border: none;
             color: #aaa;
             cursor: pointer;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             padding: 0.2rem 0.5rem;
             border-radius: 12px;
-            transition: all 0.2s;
         }
-        .edit-name-btn:hover {
-            background: #3a3a3a;
-            color: #fff;
-        }
+        .edit-name-btn:hover { background: #3a3a3a; color: #fff; }
         .copy-btn {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
             color: #e0e0e0;
-            padding: 0.4rem 1rem;
+            padding: 0.4rem 0.8rem;
             cursor: pointer;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             border-radius: 6px;
         }
         .tabs {
@@ -266,7 +264,7 @@
                 <span class="nickname" id="userNickname"></span>
                 <button class="edit-name-btn" id="editNameBtn">✎</button>
             </div>
-            <button class="copy-btn" id="copyBtn">⎘ Поделиться</button>
+            <button class="copy-btn" id="copyBtn">⎘</button>
         </div>
         <div class="tabs" id="tabsContainer"></div>
         <div class="messages-area" id="messagesArea"></div>
@@ -322,13 +320,11 @@
     }
     let username = localStorage.getItem("fembo_name") || "Гость_" + Math.floor(Math.random() * 1000);
     
-    // Обновляем отображение ника
     function updateNicknameDisplay() {
         userNicknameSpan.textContent = username;
     }
     updateNicknameDisplay();
     
-    // Редактирование имени
     editNameBtn.addEventListener("click", () => {
         const newName = prompt("Введите ваше имя:", username);
         if (newName && newName.trim()) {
@@ -352,13 +348,16 @@
     let privateMessages = new Map();
     let privateMessageIds = new Map();
     
-    // Время последнего прочтения для каждого чата
+    // Время последнего прочтения
     let lastReadTime = new Map();
     
     // Listeners
     let globalListener = null;
     let privateListeners = new Map();
     let globalPrivateListener = null;
+    
+    // Время запуска для фильтрации старых сообщений
+    const startTime = Date.now();
     
     // Save/Load
     function saveTabs() {
@@ -627,7 +626,7 @@
     function startGlobalPrivateListener() {
         if (globalPrivateListener) return;
         
-        console.log("🔔 Запуск глобального слушателя личных сообщений");
+        console.log("🔔 Запуск глобального слушателя, время старта:", new Date(startTime).toLocaleTimeString());
         
         const privateMessagesRef = ref(db, "private_messages");
         
@@ -635,13 +634,20 @@
             const data = snapshot.val();
             if (!data || !data.text) return;
             
+            // Пропускаем старые сообщения (те, что были до запуска)
+            if (data.timestamp && data.timestamp < startTime - 2000) {
+                console.log("⏭️ Пропускаем старое сообщение от", data.username, "время:", new Date(data.timestamp).toLocaleTimeString());
+                return;
+            }
+            
+            // Проверяем, это сообщение для текущего пользователя и не от себя
             if (data.toId === userId && data.fromId !== userId) {
                 const senderId = data.fromId;
                 const senderName = data.username;
-                const msgTime = data.timestamp;
                 
-                console.log(`📨 НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${senderName}`);
+                console.log(`✅ НОВОЕ СООБЩЕНИЕ от ${senderName} в ${new Date(data.timestamp).toLocaleTimeString()}`);
                 
+                // Добавляем в кэш если нужно
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -668,7 +674,7 @@
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 const lastRead = lastReadTime.get(senderId) || 0;
-                const isNew = msgTime > lastRead;
+                const isNew = data.timestamp > lastRead;
                 
                 if (!isTabOpen) {
                     console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
@@ -690,6 +696,7 @@
                         setTimeout(() => sysDiv.remove(), 8000);
                     }
                 } else if (!isActive && isNew) {
+                    console.log(`🔔 Обновляю счетчик для ${senderName}`);
                     renderTabs();
                     showToast(`💬 Новое сообщение от ${senderName}`);
                 }
@@ -816,6 +823,8 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
+    console.log("⏰ Время запуска:", new Date(startTime).toLocaleTimeString());
+    console.log("💡 Теперь только новые сообщения будут создавать вкладки");
 </script>
 </body>
 </html>
