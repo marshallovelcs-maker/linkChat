@@ -424,7 +424,7 @@
         </div>
 
         <div class="messages-area" id="messagesArea">
-            <div class="system-message">◼ Выберите чат или напишите сообщение в общий чат</div>
+            <div class="system-message">◼ Загрузка...</div>
         </div>
 
         <div class="input-area">
@@ -462,8 +462,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
-    const globalMessagesRef = ref(db, "global_messages");
-    
+    // ----- DOM элементы -----
     const messagesArea = document.getElementById("messagesArea");
     const messageInput = document.getElementById("messageInput");
     const sendBtn = document.getElementById("sendButton");
@@ -472,107 +471,79 @@
     const searchInput = document.getElementById("searchUsers");
     const tabsContainer = document.getElementById("tabsContainer");
     
+    // ----- Данные пользователя -----
     let userId = localStorage.getItem("fembo_user_id");
     if (!userId) {
-        userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 8);
+        userId = "user_" + Date.now() "_" + Math.random().toString(36).substr(2, 8);
         localStorage.setItem("fembo_user_id", userId);
     }
     
     let currentUsername = localStorage.getItem("fembo_username") || "Гость_" + Math.floor(Math.random() * 1000);
     
+    // ----- Состояние чата -----
     let currentChat = { type: "global", id: null, name: "Общий чат" };
-    let openTabs = [];
+    let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
     let allUsers = new Map();
     
-    // Хранилище
-    let activePrivateListeners = new Map();
-    let globalListenerActive = false;
+    // ----- Слушатели -----
+    let globalMessagesList = [];
+    let privateMessagesCache = new Map(); // key: userId, value: messages array
+    let activePrivateListeners = new Map(); // key: userId, value: callback
     
-    // Время последнего прочтения для каждого чата
-    let lastReadTime = new Map(); // key: chatId, value: timestamp
+    // ----- Непрочитанные -----
+    let unreadCounts = new Map(); // key: userId, value: count
     
-    // Ключи для localStorage
-    const OPEN_TABS_KEY = "fembo_open_tabs_v2";
-    const LAST_READ_KEY = "fembo_last_read";
-    
-    // Сохранение открытых вкладок
-    function saveOpenTabs() {
-        const tabsToSave = openTabs.filter(tab => tab.type === "private").map(tab => ({
-            id: tab.id,
-            name: tab.name
-        }));
-        localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(tabsToSave));
+    // Сохранение вкладок
+    function saveTabs() {
+        const tabsToSave = openTabs.filter(t => t.type === "private").map(t => ({ id: t.id, name: t.name }));
+        localStorage.setItem("fembo_tabs", JSON.stringify(tabsToSave));
     }
     
-    // Загрузка открытых вкладок
-    function loadOpenTabs() {
+    function loadTabs() {
         try {
-            const saved = localStorage.getItem(OPEN_TABS_KEY);
+            const saved = localStorage.getItem("fembo_tabs");
             if (saved) {
                 const tabs = JSON.parse(saved);
                 openTabs = [{ type: "global", id: null, name: "Общий чат" }];
-                tabs.forEach(tab => {
-                    openTabs.push({
-                        type: "private",
-                        id: tab.id,
-                        name: tab.name
-                    });
+                tabs.forEach(t => {
+                    openTabs.push({ type: "private", id: t.id, name: t.name });
                 });
-            } else {
-                openTabs = [{ type: "global", id: null, name: "Общий чат" }];
             }
-        } catch (e) {
-            openTabs = [{ type: "global", id: null, name: "Общий чат" }];
-        }
+        } catch(e) {}
     }
     
-    // Сохранение времени последнего прочтения
-    function saveLastRead() {
+    // Сохранение непрочитанных
+    function saveUnread() {
         const obj = {};
-        lastReadTime.forEach((value, key) => {
-            obj[key] = value;
-        });
-        localStorage.setItem(LAST_READ_KEY, JSON.stringify(obj));
+        unreadCounts.forEach((v, k) => { obj[k] = v; });
+        localStorage.setItem("fembo_unread", JSON.stringify(obj));
     }
     
-    // Загрузка времени последнего прочтения
-    function loadLastRead() {
+    function loadUnread() {
         try {
-            const saved = localStorage.getItem(LAST_READ_KEY);
+            const saved = localStorage.getItem("fembo_unread");
             if (saved) {
                 const obj = JSON.parse(saved);
-                lastReadTime.clear();
-                Object.entries(obj).forEach(([key, value]) => {
-                    lastReadTime.set(key, value);
-                });
+                unreadCounts.clear();
+                Object.entries(obj).forEach(([k, v]) => unreadCounts.set(k, v));
             }
-        } catch (e) {}
+        } catch(e) {}
     }
     
-    // Обновление времени последнего прочтения для чата
-    function updateLastRead(chatId) {
-        const now = Date.now();
-        lastReadTime.set(chatId, now);
-        saveLastRead();
-    }
-    
-    // Проверка, является ли сообщение непрочитанным
-    function isUnread(chatId, messageTimestamp) {
-        const lastRead = lastReadTime.get(chatId) || 0;
-        return messageTimestamp > lastRead;
-    }
-    
-    // Получение количества непрочитанных сообщений для чата
-    function getUnreadCount(chatId, messages) {
-        let count = 0;
-        const lastRead = lastReadTime.get(chatId) || 0;
-        messages.forEach(msg => {
-            if (msg.timestamp > lastRead && !msg.isOwn) {
-                count++;
-            }
+    // ----- Вспомогательные функции -----
+    function escapeHtml(str) {
+        if (!str) return "";
+        return str.replace(/[&<>]/g, m => {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
         });
-        return count;
+    }
+    
+    function scrollToBottom() {
+        setTimeout(() => messagesArea.scrollTop = messagesArea.scrollHeight, 50);
     }
     
     function showToast(text) {
@@ -588,116 +559,257 @@
         }, 2000);
     }
     
+    function addMessageToDOM(username, text, timestamp, isOwn = false) {
+        const div = document.createElement("div");
+        div.className = `message ${isOwn ? 'own' : ''}`;
+        const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        div.innerHTML = `
+            <div class="message-bubble">${escapeHtml(text)}</div>
+            <div class="message-sender">
+                <span class="sender-name">${escapeHtml(username)}</span>
+                <span class="message-time">${timeStr}</span>
+            </div>
+        `;
+        messagesArea.appendChild(div);
+        scrollToBottom();
+    }
+    
+    // ----- Рендер вкладок -----
     function renderTabs() {
-        tabsContainer.innerHTML = openTabs.map((tab, index) => {
-            let unreadCount = 0;
-            if (tab.type === "private") {
-                const messages = privateMessagesCache.get(tab.id) || [];
-                unreadCount = getUnreadCount(tab.id, messages);
-            }
-            const isBlinking = unreadCount > 0 && index !== activeTabIndex;
-            
+        tabsContainer.innerHTML = openTabs.map((tab, idx) => {
+            const unread = tab.type === "private" ? (unreadCounts.get(tab.id) || 0) : 0;
+            const isBlinking = unread > 0 && idx !== activeTabIndex;
             return `
-                <div class="tab ${index === activeTabIndex ? 'active' : ''} ${isBlinking ? 'blinking' : ''}" data-index="${index}">
+                <div class="tab ${idx === activeTabIndex ? 'active' : ''} ${isBlinking ? 'blinking' : ''}" data-index="${idx}">
                     ${tab.type === "global" ? "# " : "💬 "}${escapeHtml(tab.name)}
-                    ${unreadCount > 0 && index !== activeTabIndex ? `<span class="unread-badge">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
-                    ${tab.type !== "global" ? `<span class="close-tab" data-index="${index}">✕</span>` : ''}
+                    ${unread > 0 && idx !== activeTabIndex ? `<span class="unread-badge">${unread > 9 ? '9+' : unread}</span>` : ''}
+                    ${tab.type !== "global" ? `<span class="close-tab" data-index="${idx}">✕</span>` : ''}
                 </div>
             `;
         }).join('');
         
         document.querySelectorAll('.tab').forEach(tab => {
-            const index = parseInt(tab.dataset.index);
+            const idx = parseInt(tab.dataset.index);
             tab.addEventListener('click', (e) => {
                 if (e.target.classList.contains('close-tab')) {
                     e.stopPropagation();
-                    closeTab(index);
+                    closeTab(idx);
                 } else {
-                    switchToTab(index);
+                    switchToTab(idx);
                 }
             });
         });
     }
     
-    // Кэш сообщений для каждого чата
-    let privateMessagesCache = new Map();
-    
+    // ----- Переключение вкладки -----
     function switchToTab(index) {
+        // Останавливаем слушатель текущего личного чата
         if (currentChat.type === "private") {
             const listener = activePrivateListeners.get(currentChat.id);
             if (listener) {
-                off(listener.queryRef, 'child_added', listener.callback);
+                off(listener.ref, 'child_added', listener.callback);
                 activePrivateListeners.delete(currentChat.id);
             }
         }
         
-        const newChat = openTabs[index];
-        if (newChat.type === "private") {
-            updateLastRead(newChat.id);
+        activeTabIndex = index;
+        currentChat = openTabs[index];
+        
+        // Сбрасываем непрочитанные для этого чата
+        if (currentChat.type === "private") {
+            unreadCounts.delete(currentChat.id);
+            saveUnread();
         }
         
-        activeTabIndex = index;
-        currentChat = newChat;
-        
         renderTabs();
-        messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
         
+        // Очищаем область сообщений и показываем загрузку
+        messagesArea.innerHTML = '<div class="system-message">◼ Загрузка...</div>';
+        
+        // Загружаем сообщения
         if (currentChat.type === "global") {
-            loadGlobalMessages();
+            showGlobalMessages();
         } else {
-            loadPrivateMessages(currentChat.id);
+            showPrivateMessages(currentChat.id);
+            startPrivateListener(currentChat.id);
         }
     }
     
-    function addPrivateChat(senderId, senderName, showNotification = true) {
-        const existingIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === senderId);
+    // ----- Отображение глобальных сообщений -----
+    function showGlobalMessages() {
+        if (globalMessagesList.length === 0) {
+            messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
+            return;
+        }
+        messagesArea.innerHTML = '';
+        globalMessagesList.forEach(msg => {
+            addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId);
+        });
+    }
+    
+    // ----- Отображение личных сообщений -----
+    function showPrivateMessages(targetUserId) {
+        const messages = privateMessagesCache.get(targetUserId) || [];
+        if (messages.length === 0) {
+            messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
+            return;
+        }
+        messagesArea.innerHTML = '';
+        messages.forEach(msg => {
+            addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
+        });
+        scrollToBottom();
+    }
+    
+    // ----- Запуск слушателя личного чата -----
+    function startPrivateListener(targetUserId) {
+        if (activePrivateListeners.has(targetUserId)) return;
         
-        if (existingIndex !== -1) {
-            if (showNotification && existingIndex !== activeTabIndex) {
+        const chatId = [userId, targetUserId].sort().join('_');
+        const chatRef = ref(db, `private_messages/${chatId}`);
+        const messagesQuery = query(chatRef, limitToLast(100));
+        
+        const callback = (snapshot) => {
+            const data = snapshot.val();
+            if (!data || !data.text) return;
+            
+            const isOwn = (data.fromId === userId);
+            
+            // Обновляем кэш
+            let messages = privateMessagesCache.get(targetUserId) || [];
+            messages.push({
+                username: data.username,
+                text: data.text,
+                timestamp: data.timestamp,
+                fromId: data.fromId,
+                isOwn: isOwn
+            });
+            messages.sort((a, b) => a.timestamp - b.timestamp);
+            privateMessagesCache.set(targetUserId, messages);
+            
+            // Если это сообщение для меня и не от меня, и чат не активен - увеличиваем счетчик
+            if (data.toId === userId && data.fromId !== userId && currentChat.id !== targetUserId) {
+                const current = unreadCounts.get(targetUserId) || 0;
+                unreadCounts.set(targetUserId, current + 1);
+                saveUnread();
                 renderTabs();
-                showToast(`📩 Новое сообщение от ${senderName}`);
+                showToast(`📩 Новое сообщение от ${data.username}`);
             }
+            
+            // Если этот чат сейчас активен - обновляем отображение
+            if (currentChat.type === "private" && currentChat.id === targetUserId) {
+                messagesArea.innerHTML = '';
+                messages.forEach(msg => {
+                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
+                });
+                scrollToBottom();
+            }
+        };
+        
+        onChildAdded(messagesQuery, callback);
+        activePrivateListeners.set(targetUserId, { ref: messagesQuery, callback });
+    }
+    
+    // ----- Глобальный слушатель -----
+    function startGlobalListener() {
+        const globalQuery = query(globalMessagesRef, limitToLast(100));
+        
+        onChildAdded(globalQuery, (snapshot) => {
+            const data = snapshot.val();
+            if (!data || !data.text) return;
+            
+            globalMessagesList.push({
+                username: data.username,
+                text: data.text,
+                timestamp: data.timestamp,
+                userId: data.userId
+            });
+            globalMessagesList.sort((a, b) => a.timestamp - b.timestamp);
+            
+            if (currentChat.type === "global") {
+                messagesArea.innerHTML = '';
+                globalMessagesList.forEach(msg => {
+                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId);
+                });
+                scrollToBottom();
+            }
+        });
+    }
+    
+    // ----- Отправка сообщения -----
+    let lastSendTime = 0;
+    function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text) return;
+        
+        const now = Date.now();
+        if (now - lastSendTime < 500) {
+            showToast("◼ Подождите");
+            return;
+        }
+        lastSendTime = now;
+        
+        if (currentChat.type === "global") {
+            push(globalMessagesRef, {
+                username: currentUsername,
+                text: text,
+                timestamp: Date.now(),
+                userId: userId
+            });
+        } else {
+            const chatId = [userId, currentChat.id].sort().join('_');
+            push(ref(db, `private_messages/${chatId}`), {
+                username: currentUsername,
+                text: text,
+                timestamp: Date.now(),
+                fromId: userId,
+                toId: currentChat.id
+            });
+        }
+        
+        messageInput.value = "";
+        messageInput.focus();
+    }
+    
+    // ----- Открыть личный чат -----
+    function openPrivateChat(targetId, targetName) {
+        const existing = openTabs.findIndex(t => t.type === "private" && t.id === targetId);
+        if (existing !== -1) {
+            switchToTab(existing);
             return;
         }
         
-        openTabs.push({
-            type: "private",
-            id: senderId,
-            name: senderName
-        });
-        
-        saveOpenTabs();
+        openTabs.push({ type: "private", id: targetId, name: targetName });
+        saveTabs();
         renderTabs();
-        
-        if (showNotification) {
-            showToast(`📩 Новое сообщение от ${senderName} (добавлена вкладка)`);
-        }
+        switchToTab(openTabs.length - 1);
     }
     
+    // ----- Закрыть вкладку -----
     function closeTab(index) {
         if (openTabs[index].type === "global") return;
         
-        const tabToClose = openTabs[index];
+        const tab = openTabs[index];
         
-        const listener = activePrivateListeners.get(tabToClose.id);
+        // Останавливаем слушатель
+        const listener = activePrivateListeners.get(tab.id);
         if (listener) {
-            off(listener.queryRef, 'child_added', listener.callback);
-            activePrivateListeners.delete(tabToClose.id);
+            off(listener.ref, 'child_added', listener.callback);
+            activePrivateListeners.delete(tab.id);
         }
         
-        privateMessagesCache.delete(tabToClose.id);
-        
         openTabs.splice(index, 1);
-        saveOpenTabs();
+        saveTabs();
         
         if (activeTabIndex === index) {
             activeTabIndex = Math.max(0, openTabs.length - 1);
             currentChat = openTabs[activeTabIndex];
             renderTabs();
             if (currentChat.type === "global") {
-                loadGlobalMessages();
+                showGlobalMessages();
             } else {
-                loadPrivateMessages(currentChat.id);
+                showPrivateMessages(currentChat.id);
+                startPrivateListener(currentChat.id);
             }
         } else if (activeTabIndex > index) {
             activeTabIndex--;
@@ -707,271 +819,41 @@
         }
     }
     
-    function loadGlobalMessages() {
-        if (globalListenerActive) return;
-        
-        const messagesQuery = query(globalMessagesRef, limitToLast(100));
-        const messagesList = [];
-        
-        const callback = (snapshot) => {
-            const data = snapshot.val();
-            if (data && data.username && data.text && !data.toId) {
-                const isOwn = (data.userId === userId);
-                messagesList.push({
-                    username: data.username,
-                    text: data.text,
-                    timestamp: data.timestamp,
-                    isOwn: isOwn
-                });
-                messagesList.sort((a, b) => a.timestamp - b.timestamp);
-                messagesArea.innerHTML = '';
-                messagesList.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.isOwn);
-                });
-                scrollToBottom();
-            }
-        };
-        
-        onChildAdded(messagesQuery, callback);
-        globalListenerActive = true;
-        
-        setTimeout(() => {
-            if (messagesList.length === 0 && messagesArea.children.length <= 1) {
-                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
-            }
-        }, 1000);
-    }
-    
-    function loadPrivateMessages(targetUserId) {
-        if (activePrivateListeners.has(targetUserId)) return;
-        
-        const chatId = [userId, targetUserId].sort().join('_');
-        const privateChatRef = ref(db, `private_messages/${chatId}`);
-        const messagesQuery = query(privateChatRef, limitToLast(100));
-        const messagesList = [];
-        
-        const callback = (snapshot) => {
-            const data = snapshot.val();
-            if (data && data.username && data.text) {
-                const isOwn = (data.fromId === userId);
-                const msgData = {
-                    username: data.username,
-                    text: data.text,
-                    timestamp: data.timestamp,
-                    isOwn: isOwn
-                };
-                messagesList.push(msgData);
-                messagesList.sort((a, b) => a.timestamp - b.timestamp);
-                
-                // Сохраняем в кэш
-                privateMessagesCache.set(targetUserId, messagesList);
-                
-                // Обновляем отображение вкладок (для счетчика)
-                renderTabs();
-                
-                // Если этот чат активен, показываем сообщения
-                if (currentChat.type === "private" && currentChat.id === targetUserId) {
-                    messagesArea.innerHTML = '';
-                    messagesList.forEach(msg => {
-                        addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.isOwn);
-                    });
-                    scrollToBottom();
-                }
-            }
-        };
-        
-        activePrivateListeners.set(targetUserId, { queryRef: messagesQuery, callback });
-        onChildAdded(messagesQuery, callback);
-        
-        setTimeout(() => {
-            if (messagesList.length === 0 && messagesArea.children.length <= 1 && currentChat.type === "private" && currentChat.id === targetUserId) {
-                messagesArea.innerHTML = '<div class="system-message">◼ Нет сообщений. Напишите что-нибудь!</div>';
-            }
-        }, 1000);
-    }
-    
-    // ГЛАВНЫЙ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ - проверяет каждое новое сообщение
-    function setupNotificationListener() {
-        console.log("🔔 Запуск слушателя уведомлений...");
-        
-        const privateMessagesRef = ref(db, "private_messages");
-        
-        onChildAdded(privateMessagesRef, (snapshot) => {
-            const data = snapshot.val();
-            const messageTime = data?.timestamp || Date.now();
-            
-            if (data && data.toId === userId && data.fromId !== userId) {
-                console.log("📨 НОВОЕ СООБЩЕНИЕ от:", data.username, "время:", new Date(messageTime).toLocaleTimeString());
-                
-                const senderId = data.fromId;
-                const senderName = data.username;
-                
-                // Проверяем, активен ли этот чат
-                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
-                
-                if (!isActive) {
-                    // Добавляем вкладку если нужно
-                    addPrivateChat(senderId, senderName, true);
-                    
-                    // Обновляем кэш сообщений
-                    const messages = privateMessagesCache.get(senderId) || [];
-                    messages.push({
-                        username: senderName,
-                        text: data.text,
-                        timestamp: messageTime,
-                        isOwn: false
-                    });
-                    privateMessagesCache.set(senderId, messages);
-                    
-                    // Обновляем отображение вкладок
-                    renderTabs();
-                } else {
-                    // Если чат активен, обновляем время последнего прочтения
-                    updateLastRead(senderId);
-                    console.log("✅ Чат активен, сообщение отобразится автоматически");
-                }
-            }
-        });
-        
-        console.log("✅ Слушатель уведомлений запущен");
-    }
-    
-    function addMessageToDOM(username, text, timestamp, isOwn = false) {
-        const messageDiv = document.createElement("div");
-        messageDiv.className = `message ${isOwn ? 'own' : ''}`;
-        const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        messageDiv.innerHTML = `
-            <div class="message-bubble">${escapeHtml(text)}</div>
-            <div class="message-sender">
-                <span class="sender-name">${escapeHtml(username)}</span>
-                <span class="message-time">${timeStr}</span>
-            </div>
-        `;
-        messagesArea.appendChild(messageDiv);
-        scrollToBottom();
-    }
-    
-    function addSystemMessage(text) {
-        const sysDiv = document.createElement("div");
-        sysDiv.className = "system-message";
-        sysDiv.innerHTML = `◼ ${escapeHtml(text)}`;
-        messagesArea.appendChild(sysDiv);
-        scrollToBottom();
-    }
-    
-    function scrollToBottom() {
-        setTimeout(() => {
-            messagesArea.scrollTop = messagesArea.scrollHeight;
-        }, 50);
-    }
-    
-    function escapeHtml(str) {
-        if (!str) return "";
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-    
-    function openPrivateChat(targetUserId, targetUserName) {
-        const existingIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === targetUserId);
-        if (existingIndex !== -1) {
-            switchToTab(existingIndex);
-            return;
-        }
-        
-        addPrivateChat(targetUserId, targetUserName, false);
-        switchToTab(openTabs.length - 1);
-    }
-    
-    let lastSendTime = 0;
-    const SEND_DELAY = 500;
-    
-    function sendMessage() {
-        const text = messageInput.value.trim();
-        if (!text) return;
-        
-        const now = Date.now();
-        if (now - lastSendTime < SEND_DELAY) {
-            showToast("◼ Подождите перед отправкой следующего сообщения");
-            return;
-        }
-        
-        lastSendTime = now;
-        const username = currentUsername.trim() || "Аноним";
-        
-        if (currentChat.type === "global") {
-            push(globalMessagesRef, {
-                username: username,
-                text: text,
-                timestamp: Date.now(),
-                userId: userId,
-                type: "global"
-            }).catch(() => {
-                showToast("◼ Ошибка отправки");
-                lastSendTime = 0;
-            });
-        } else {
-            const chatId = [userId, currentChat.id].sort().join('_');
-            const privateChatRef = ref(db, `private_messages/${chatId}`);
-            push(privateChatRef, {
-                username: username,
-                text: text,
-                timestamp: Date.now(),
-                fromId: userId,
-                toId: currentChat.id,
-                type: "private"
-            }).catch(() => {
-                showToast("◼ Ошибка отправки");
-                lastSendTime = 0;
-            });
-            
-            // Обновляем время последнего прочтения для своих сообщений
-            updateLastRead(currentChat.id);
-        }
-        
-        messageInput.value = "";
-        messageInput.focus();
-    }
-    
-    function updateUserStatus() {
-        const userStatusRef = ref(db, `users/${userId}`);
-        set(userStatusRef, {
+    // ----- Статус пользователя -----
+    function updateStatus() {
+        set(ref(db, `users/${userId}`), {
             username: currentUsername,
             lastSeen: Date.now(),
-            online: true,
-            userId: userId
+            online: true
         });
     }
     
-    function showNamePrompt() {
-        const name = prompt("Введите ваше имя:", currentUsername);
-        if (name && name.trim()) {
-            currentUsername = name.trim().slice(0, 24);
-            localStorage.setItem("fembo_username", currentUsername);
-            updateUserStatus();
+    // ----- Список пользователей -----
+    onValue(ref(db, "users"), (snapshot) => {
+        const users = snapshot.val();
+        allUsers.clear();
+        if (users) {
+            const now = Date.now();
+            for (let id in users) {
+                if (id !== userId) {
+                    const online = (now - (users[id].lastSeen || 0) < 120000);
+                    allUsers.set(id, { name: users[id].username, online });
+                }
+            }
         }
-    }
-    
-    function renderUsersList() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const users = Array.from(allUsers.entries())
-            .filter(([id, data]) => data.name.toLowerCase().includes(searchTerm))
-            .sort((a, b) => {
-                if (a[1].online !== b[1].online) return b[1].online ? 1 : -1;
-                return a[1].name.localeCompare(b[1].name);
-            });
         
-        if (users.length === 0) {
-            usersListDiv.innerHTML = '<div class="system-message" style="margin: 1rem;">◼ Нет других пользователей</div>';
+        const searchTerm = searchInput.value.toLowerCase();
+        const usersList = Array.from(allUsers.entries())
+            .filter(([id, data]) => data.name.toLowerCase().includes(searchTerm))
+            .sort((a, b) => (b[1].online ? 1 : 0) - (a[1].online ? 1 : 0));
+        
+        if (usersList.length === 0) {
+            usersListDiv.innerHTML = '<div class="system-message" style="margin:1rem;">◼ Нет пользователей</div>';
             return;
         }
         
-        usersListDiv.innerHTML = users.map(([id, data]) => `
-            <div class="user-item" data-user-id="${id}" data-user-name="${data.name}">
+        usersListDiv.innerHTML = usersList.map(([id, data]) => `
+            <div class="user-item" data-id="${id}" data-name="${data.name}">
                 <div class="user-info">
                     <span class="user-avatar">🦊</span>
                     <span class="user-name">${escapeHtml(data.name)}</span>
@@ -982,84 +864,59 @@
         
         document.querySelectorAll('.user-item').forEach(el => {
             el.addEventListener('click', () => {
-                const targetId = el.dataset.userId;
-                const targetName = el.dataset.userName;
-                openPrivateChat(targetId, targetName);
+                openPrivateChat(el.dataset.id, el.dataset.name);
             });
         });
-    }
-    
-    onValue(ref(db, "users"), (snapshot) => {
-        const users = snapshot.val();
-        allUsers.clear();
-        if (users) {
-            const now = Date.now();
-            for (let id in users) {
-                const user = users[id];
-                const isOnline = (now - (user.lastSeen || 0) < 120000);
-                if (id !== userId) {
-                    allUsers.set(id, {
-                        name: user.username,
-                        online: isOnline,
-                        lastSeen: user.lastSeen
-                    });
-                }
-            }
-        }
-        renderUsersList();
     });
     
-    searchInput.addEventListener("input", renderUsersList);
+    // ----- Инициализация -----
+    searchInput.addEventListener("input", () => {
+        const event = new Event('value');
+        document.dispatchEvent(event);
+    });
+    
     sendBtn.addEventListener("click", sendMessage);
-    messageInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") sendMessage();
-    });
+    messageInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
     
     copyLinkBtn.addEventListener("click", () => {
         navigator.clipboard.writeText(window.location.href);
         showToast("◼ Ссылка скопирована");
     });
     
-    setTimeout(() => {
-        if (currentUsername.startsWith("Гость_")) {
-            showNamePrompt();
-        }
-    }, 500);
+    // Загружаем сохраненное
+    loadTabs();
+    loadUnread();
     
-    updateUserStatus();
-    setInterval(updateUserStatus, 30000);
+    // Запускаем слушатели
+    const globalMessagesRef = ref(db, "global_messages");
+    startGlobalListener();
+    updateStatus();
+    setInterval(updateStatus, 30000);
     
     window.addEventListener("beforeunload", () => {
-        const userStatusRef = ref(db, `users/${userId}`);
-        set(userStatusRef, {
+        set(ref(db, `users/${userId}`), {
             username: currentUsername,
             lastSeen: Date.now(),
-            online: false,
-            userId: userId
+            online: false
         });
     });
     
-    addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
+    // Приветствие
+    setTimeout(() => {
+        if (currentUsername.startsWith("Гость_")) {
+            const name = prompt("Введите ваше имя:", currentUsername);
+            if (name && name.trim()) {
+                currentUsername = name.trim().slice(0, 24);
+                localStorage.setItem("fembo_username", currentUsername);
+                updateStatus();
+            }
+        }
+        messagesArea.innerHTML = '<div class="system-message">◼ Выберите чат</div>';
+        showGlobalMessages();
+    }, 500);
     
-    // Загружаем сохраненные данные
-    loadOpenTabs();
-    loadLastRead();
-    
-    // Запускаем слушатель
-    setupNotificationListener();
-    
-    // Загружаем общий чат
-    loadGlobalMessages();
-    
-    // Рендерим вкладки
     renderTabs();
-    
-    // Если есть сохраненная активная вкладка, загружаем её
-    if (openTabs.length > 1 && openTabs[activeTabIndex].type !== "global") {
-        loadPrivateMessages(openTabs[activeTabIndex].id);
-    }
-    
-    console.log("💡 Откройте консоль (F12) чтобы видеть уведомления о новых сообщениях");
+    showGlobalMessages();
 </script>
 </body>
 </html>
