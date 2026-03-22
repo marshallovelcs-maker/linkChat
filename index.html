@@ -67,7 +67,7 @@
         .main-area { flex: 1; display: flex; flex-direction: column; }
         .chat-header {
             background: #000;
-            padding: 1rem;
+            padding: 0.8rem 1rem;
             border-bottom: 1px solid #2a2a2a;
             display: flex;
             justify-content: space-between;
@@ -75,13 +75,44 @@
         }
         .brand { display: flex; align-items: center; gap: 10px; }
         .logo { font-size: 24px; }
-        h1 { font-size: 1.3rem; color: #fff; }
+        h1 { font-size: 1.2rem; color: #fff; }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #1a1a1a;
+            padding: 0.3rem 1rem;
+            border-radius: 20px;
+            border: 1px solid #3a3a3a;
+        }
+        .user-info span:first-child { color: #888; font-size: 0.75rem; }
+        .user-info .nickname {
+            color: #ffaa66;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        .edit-name-btn {
+            background: #2a2a2a;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+        .edit-name-btn:hover {
+            background: #3a3a3a;
+            color: #fff;
+        }
         .copy-btn {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
             color: #e0e0e0;
             padding: 0.4rem 1rem;
             cursor: pointer;
+            font-size: 0.8rem;
+            border-radius: 6px;
         }
         .tabs {
             display: flex;
@@ -226,7 +257,15 @@
     </div>
     <div class="main-area">
         <div class="chat-header">
-            <div class="brand"><div class="logo">🦊</div><h1>Fembo</h1></div>
+            <div class="brand">
+                <div class="logo">🦊</div>
+                <h1>Fembo</h1>
+            </div>
+            <div class="user-info">
+                <span>👤</span>
+                <span class="nickname" id="userNickname"></span>
+                <button class="edit-name-btn" id="editNameBtn">✎</button>
+            </div>
             <button class="copy-btn" id="copyBtn">⎘ Поделиться</button>
         </div>
         <div class="tabs" id="tabsContainer"></div>
@@ -272,6 +311,8 @@
     const usersListDiv = document.getElementById("usersList");
     const searchInput = document.getElementById("searchUsers");
     const tabsContainer = document.getElementById("tabsContainer");
+    const userNicknameSpan = document.getElementById("userNickname");
+    const editNameBtn = document.getElementById("editNameBtn");
     
     // User data
     let userId = localStorage.getItem("fembo_id");
@@ -280,6 +321,24 @@
         localStorage.setItem("fembo_id", userId);
     }
     let username = localStorage.getItem("fembo_name") || "Гость_" + Math.floor(Math.random() * 1000);
+    
+    // Обновляем отображение ника
+    function updateNicknameDisplay() {
+        userNicknameSpan.textContent = username;
+    }
+    updateNicknameDisplay();
+    
+    // Редактирование имени
+    editNameBtn.addEventListener("click", () => {
+        const newName = prompt("Введите ваше имя:", username);
+        if (newName && newName.trim()) {
+            username = newName.trim().slice(0, 24);
+            localStorage.setItem("fembo_name", username);
+            updateNicknameDisplay();
+            updateStatus();
+            showToast(`Имя изменено на ${username}`);
+        }
+    });
     
     // State
     let currentChat = { type: "global", id: null, name: "Общий чат" };
@@ -294,7 +353,7 @@
     let privateMessageIds = new Map();
     
     // Время последнего прочтения для каждого чата
-    let lastReadTime = new Map(); // key: userId or "global"
+    let lastReadTime = new Map();
     
     // Listeners
     let globalListener = null;
@@ -416,7 +475,6 @@
         activeTabIndex = index;
         currentChat = openTabs[index];
         
-        // Обновляем время последнего прочтения для этого чата
         if (currentChat.type === "private") {
             updateLastRead(currentChat.id);
         } else {
@@ -551,13 +609,11 @@
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
             
-            // Если чат активен, обновляем UI
             if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
                 });
-                // Обновляем время последнего прочтения для активного чата
                 updateLastRead(targetId);
                 renderTabs();
             }
@@ -567,7 +623,7 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ ДЛЯ НОВЫХ ЛИЧНЫХ СООБЩЕНИЙ (создает вкладки)
+    // Глобальный слушатель для новых личных сообщений
     function startGlobalPrivateListener() {
         if (globalPrivateListener) return;
         
@@ -579,7 +635,6 @@
             const data = snapshot.val();
             if (!data || !data.text) return;
             
-            // Проверяем, это сообщение для текущего пользователя и не от себя
             if (data.toId === userId && data.fromId !== userId) {
                 const senderId = data.fromId;
                 const senderName = data.username;
@@ -587,7 +642,6 @@
                 
                 console.log(`📨 НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${senderName}`);
                 
-                // Добавляем сообщение в кэш
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -611,23 +665,18 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
-                // Проверяем, открыта ли вкладка
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 const lastRead = lastReadTime.get(senderId) || 0;
                 const isNew = msgTime > lastRead;
                 
                 if (!isTabOpen) {
-                    // СОЗДАЕМ НОВУЮ ВКЛАДКУ
                     console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: senderName });
                     saveTabs();
                     renderTabs();
-                    
-                    // ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ
                     showToast(`💬 Новое сообщение от ${senderName}`);
                     
-                    // СИСТЕМНОЕ СООБЩЕНИЕ В ОБЩИЙ ЧАТ
                     if (currentChat.type === "global") {
                         const sysDiv = document.createElement("div");
                         sysDiv.className = "system";
@@ -641,8 +690,6 @@
                         setTimeout(() => sysDiv.remove(), 8000);
                     }
                 } else if (!isActive && isNew) {
-                    // Вкладка есть, но не активна - обновляем отображение
-                    console.log(`🔔 Обновляю счетчик для ${senderName}`);
                     renderTabs();
                     showToast(`💬 Новое сообщение от ${senderName}`);
                 }
@@ -679,7 +726,6 @@
                 fromId: userId,
                 toId: currentChat.id
             }).catch(err => console.error(err));
-            // Обновляем время прочтения для своих сообщений
             updateLastRead(currentChat.id);
         }
         messageInput.value = "";
@@ -749,24 +795,13 @@
     loadTabs();
     loadLastRead();
     startGlobalListener();
-    startGlobalPrivateListener(); // ВАЖНО: запускаем глобальный слушатель для создания вкладок
+    startGlobalPrivateListener();
     updateStatus();
     setInterval(updateStatus, 30000);
     
     window.addEventListener("beforeunload", () => {
         set(ref(db, `users/${userId}`), { username, lastSeen: Date.now(), online: false });
     });
-    
-    setTimeout(() => {
-        if (username.startsWith("Гость_")) {
-            const newName = prompt("Введите ваше имя:", username);
-            if (newName && newName.trim()) {
-                username = newName.trim().slice(0, 24);
-                localStorage.setItem("fembo_name", username);
-                updateStatus();
-            }
-        }
-    }, 500);
     
     renderTabs();
     
@@ -781,7 +816,6 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
-    console.log("🔔 Глобальный слушатель активен - новые сообщения будут создавать вкладки");
 </script>
 </body>
 </html>
