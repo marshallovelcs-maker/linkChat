@@ -103,7 +103,6 @@
             font-size: 0.8rem;
             white-space: nowrap;
             position: relative;
-            transition: all 0.2s;
         }
         .tab.active {
             background: #1a1a1a;
@@ -131,8 +130,6 @@
             font-size: 0.6rem;
             padding: 2px 5px;
             border-radius: 10px;
-            min-width: 16px;
-            text-align: center;
         }
         .messages-area {
             flex: 1;
@@ -157,15 +154,13 @@
             border: 1px solid #2a2a2a;
             border-radius: 8px;
         }
-        .message.own .bubble { background: #2a2a2a; border-color: #3a3a3a; }
+        .message.own .bubble { background: #2a2a2a; }
         .sender {
             font-size: 0.65rem;
             color: #888;
             margin-top: 0.2rem;
-            display: flex;
-            gap: 0.5rem;
         }
-        .message.own .sender { justify-content: flex-end; }
+        .message.own .sender { text-align: right; }
         .system {
             text-align: center;
             font-size: 0.7rem;
@@ -186,14 +181,13 @@
         }
         .input-wrapper {
             flex: 1;
-            display: flex;
             background: #111;
             padding: 0.2rem 0.2rem 0.2rem 1rem;
             border: 1px solid #2a2a2a;
             border-radius: 6px;
         }
         #messageInput {
-            flex: 1;
+            width: 100%;
             background: transparent;
             border: none;
             padding: 0.6rem 0.3rem;
@@ -219,7 +213,6 @@
             padding: 0.5rem 1rem;
             border-radius: 8px;
             z-index: 1000;
-            font-size: 0.85rem;
         }
     </style>
 </head>
@@ -362,10 +355,7 @@
         const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         div.innerHTML = `
             <div class="bubble">${escapeHtml(text)}</div>
-            <div class="sender">
-                <span>${escapeHtml(name)}</span>
-                <span style="color:#666">${time}</span>
-            </div>
+            <div class="sender">${escapeHtml(name)} • ${time}</div>
         `;
         messagesArea.appendChild(div);
         messagesArea.scrollTop = messagesArea.scrollHeight;
@@ -567,6 +557,8 @@
             const data = snapshot.val();
             const msgId = snapshot.key;
             
+            console.log("📨 Получено сообщение в слушателе:", data);
+            
             if (!data || !data.text) return;
             
             // Проверяем, сообщение для текущего пользователя и не от себя
@@ -574,9 +566,9 @@
                 const senderId = data.fromId;
                 const senderName = data.username;
                 
-                console.log(`🔔 НОВОЕ СООБЩЕНИЕ от ${senderName}`);
+                console.log(`✅ СООБЩЕНИЕ ДЛЯ ВАС от ${senderName}`);
                 
-                // Добавляем в кэш
+                // Добавляем в кэш если нужно
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -603,9 +595,12 @@
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
+                console.log(`📊 isTabOpen=${isTabOpen}, isActive=${isActive}`);
+                console.log(`📊 Текущие вкладки:`, openTabs.map(t => t.name));
+                
                 if (!isTabOpen) {
                     // СОЗДАЕМ НОВУЮ ВКЛАДКУ
-                    console.log(`➕ Создаю новую вкладку для ${senderName}`);
+                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: senderName });
                     saveTabs();
                     
@@ -620,7 +615,7 @@
                     // ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ
                     showToast(`💬 Новое сообщение от ${senderName}`);
                     
-                    // СИСТЕМНОЕ СООБЩЕНИЕ
+                    // СИСТЕМНОЕ СООБЩЕНИЕ В ОБЩИЙ ЧАТ
                     if (currentChat.type === "global") {
                         const sysDiv = document.createElement("div");
                         sysDiv.className = "system";
@@ -785,6 +780,7 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
+    console.log("💡 Откройте другую вкладку и отправьте сообщение");
 </script>
 </body>
 </html>
