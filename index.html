@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>LinkChat — Черно-белый чат</title>
+    <title>Fembo — Чат</title>
     <style>
         * {
             margin: 0;
@@ -51,20 +51,25 @@
             flex-wrap: wrap;
         }
 
+        .logo {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo svg {
+            width: 28px;
+            height: 28px;
+            filter: brightness(0) invert(1);
+        }
+
         .brand h1 {
             font-size: 1.5rem;
             font-weight: 600;
             color: #ffffff;
             letter-spacing: -0.5px;
-        }
-
-        .badge {
-            background: #2a2a2a;
-            padding: 0.25rem 0.8rem;
-            font-size: 0.7rem;
-            color: #aaaaaa;
-            font-family: monospace;
-            border: 1px solid #3a3a3a;
         }
 
         .online-badge {
@@ -314,8 +319,15 @@
 <div class="chat-container">
     <div class="chat-header">
         <div class="brand">
-            <h1>◼ LinkChat</h1>
-            <div class="badge">black & white</div>
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8 2 5 5 5 9c0 3 2 5 4 7-1 2-2 3-3 4 2-1 4-1 6-2 1 0 2 0 3 0 2 1 4 1 6 2-1-1-2-2-3-4 2-2 4-4 4-7 0-4-3-7-7-7z" fill="white"/>
+                    <circle cx="9" cy="9" r="1" fill="#1a1a1a"/>
+                    <circle cx="15" cy="9" r="1" fill="#1a1a1a"/>
+                    <path d="M9 13c1 1 2 1.5 3 1.5s2-0.5 3-1.5" stroke="#1a1a1a" stroke-width="1" fill="none"/>
+                </svg>
+            </div>
+            <h1>Fembo</h1>
             <div class="online-badge" id="onlineStatus">
                 <span>●</span> <span id="onlineCount">0</span>
             </div>
