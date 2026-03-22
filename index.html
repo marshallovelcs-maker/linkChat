@@ -302,17 +302,19 @@
     let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
     let users = new Map();
-    let unread = new Map(); // key: userId, value: count
     
-    // Message caches - храним только ID для предотвращения дублирования
-    let globalMessages = []; // { id, username, text, timestamp, userId }
+    // Время последнего прочтения для каждого чата (ключ: userId или "global")
+    let lastReadTime = new Map();
+    
+    // Message caches
+    let globalMessages = [];
     let globalMessageIds = new Set();
-    let privateMessages = new Map(); // key: userId, value: array of { id, username, text, timestamp, fromId }
-    let privateMessageIds = new Map(); // key: userId, value: Set of message IDs
+    let privateMessages = new Map(); // key: userId, value: array
+    let privateMessageIds = new Map(); // key: userId, value: Set
     
     // Firebase listeners
     let globalListener = null;
-    let privateListeners = new Map(); // key: userId, value: { ref, callback }
+    let privateListeners = new Map();
     
     // Save/Load
     function saveTabs() {
@@ -329,20 +331,49 @@
             }
         } catch(e) {}
     }
-    function saveUnread() {
+    
+    function saveLastRead() {
         const obj = {};
-        unread.forEach((v, k) => obj[k] = v);
-        localStorage.setItem("fembo_unread", JSON.stringify(obj));
+        lastReadTime.forEach((v, k) => obj[k] = v);
+        localStorage.setItem("fembo_lastread", JSON.stringify(obj));
     }
-    function loadUnread() {
+    
+    function loadLastRead() {
         try {
-            const saved = localStorage.getItem("fembo_unread");
+            const saved = localStorage.getItem("fembo_lastread");
             if (saved) {
                 const obj = JSON.parse(saved);
-                unread.clear();
-                Object.entries(obj).forEach(([k, v]) => unread.set(k, v));
+                lastReadTime.clear();
+                Object.entries(obj).forEach(([k, v]) => lastReadTime.set(k, v));
             }
         } catch(e) {}
+    }
+    
+    // Получение количества непрочитанных для чата
+    function getUnreadCount(chatId) {
+        const lastRead = lastReadTime.get(chatId) || 0;
+        const messages = privateMessages.get(chatId) || [];
+        let count = 0;
+        for (const msg of messages) {
+            if (msg.fromId !== userId && msg.timestamp > lastRead) {
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    // Обновление времени прочтения для текущего чата
+    function updateLastRead() {
+        if (currentChat.type === "global") {
+            const now = Date.now();
+            lastReadTime.set("global", now);
+            saveLastRead();
+        } else if (currentChat.type === "private") {
+            const now = Date.now();
+            lastReadTime.set(currentChat.id, now);
+            saveLastRead();
+            renderTabs(); // Обновляем отображение счетчика
+        }
     }
     
     // UI Helpers
@@ -379,7 +410,10 @@
     
     function renderTabs() {
         tabsContainer.innerHTML = openTabs.map((tab, idx) => {
-            const unreadCount = tab.type === "private" ? (unread.get(tab.id) || 0) : 0;
+            let unreadCount = 0;
+            if (tab.type === "private") {
+                unreadCount = getUnreadCount(tab.id);
+            }
             const isBlinking = unreadCount > 0 && idx !== activeTabIndex;
             return `
                 <div class="tab ${idx === activeTabIndex ? 'active' : ''} ${isBlinking ? 'blinking' : ''}" data-index="${idx}">
@@ -415,11 +449,8 @@
         activeTabIndex = index;
         currentChat = openTabs[index];
         
-        // Clear unread for this chat
-        if (currentChat.type === "private") {
-            unread.delete(currentChat.id);
-            saveUnread();
-        }
+        // Обновляем время последнего прочтения для этого чата
+        updateLastRead();
         
         renderTabs();
         
@@ -537,7 +568,6 @@
         const chatRef = ref(db, `private_messages/${chatId}`);
         const chatQuery = query(chatRef, limitToLast(100));
         
-        // Initialize message IDs set for this chat
         if (!privateMessageIds.has(targetId)) {
             privateMessageIds.set(targetId, new Set());
         }
@@ -562,16 +592,15 @@
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
             
-            // Check if message is for current user and chat is not active
+            // Проверяем, нужно ли показать уведомление
             const isForMe = data.toId === userId;
             const isNotFromMe = data.fromId !== userId;
+            const lastRead = lastReadTime.get(targetId) || 0;
+            const isNew = data.timestamp > lastRead;
             const isNotActive = currentChat.type !== "private" || currentChat.id !== targetId;
             
-            if (isForMe && isNotFromMe && isNotActive) {
-                const current = unread.get(targetId) || 0;
-                unread.set(targetId, current + 1);
-                saveUnread();
-                renderTabs();
+            if (isForMe && isNotFromMe && isNew && isNotActive) {
+                renderTabs(); // Обновляем отображение счетчика
                 showToast(`📩 Новое сообщение от ${data.username}`);
             }
             
@@ -582,6 +611,8 @@
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
                 });
                 scrollToBottom();
+                // Обновляем время прочтения для активного чата
+                updateLastRead();
             }
         };
         
@@ -616,6 +647,8 @@
                 fromId: userId,
                 toId: currentChat.id
             });
+            // Обновляем время прочтения для своих сообщений
+            updateLastRead();
         }
         messageInput.value = "";
         messageInput.focus();
@@ -680,7 +713,7 @@
     });
     
     loadTabs();
-    loadUnread();
+    loadLastRead();
     startGlobalListener();
     updateStatus();
     setInterval(updateStatus, 30000);
