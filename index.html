@@ -303,7 +303,7 @@
     let activeTabIndex = 0;
     let users = new Map();
     
-    // Время последнего прочтения для каждого чата (ключ: userId или "global")
+    // Время последнего прочтения (ключ: userId или "global")
     let lastReadTime = new Map();
     
     // Message caches
@@ -314,7 +314,10 @@
     
     // Firebase listeners
     let globalListener = null;
-    let privateListeners = new Map();
+    let privateListeners = new Map(); // key: userId, value: { ref, callback }
+    
+    // Глобальный слушатель для всех новых приватных сообщений
+    let globalPrivateListener = null;
     
     // Save/Load
     function saveTabs() {
@@ -337,7 +340,6 @@
         lastReadTime.forEach((v, k) => obj[k] = v);
         localStorage.setItem("fembo_lastread", JSON.stringify(obj));
     }
-    
     function loadLastRead() {
         try {
             const saved = localStorage.getItem("fembo_lastread");
@@ -349,7 +351,7 @@
         } catch(e) {}
     }
     
-    // Получение количества непрочитанных для чата
+    // Получение количества непрочитанных
     function getUnreadCount(chatId) {
         const lastRead = lastReadTime.get(chatId) || 0;
         const messages = privateMessages.get(chatId) || [];
@@ -362,17 +364,15 @@
         return count;
     }
     
-    // Обновление времени прочтения для текущего чата
+    // Обновление времени прочтения
     function updateLastRead() {
         if (currentChat.type === "global") {
-            const now = Date.now();
-            lastReadTime.set("global", now);
+            lastReadTime.set("global", Date.now());
             saveLastRead();
         } else if (currentChat.type === "private") {
-            const now = Date.now();
-            lastReadTime.set(currentChat.id, now);
+            lastReadTime.set(currentChat.id, Date.now());
             saveLastRead();
-            renderTabs(); // Обновляем отображение счетчика
+            renderTabs();
         }
     }
     
@@ -448,10 +448,7 @@
         
         activeTabIndex = index;
         currentChat = openTabs[index];
-        
-        // Обновляем время последнего прочтения для этого чата
         updateLastRead();
-        
         renderTabs();
         
         // Display messages
@@ -560,7 +557,7 @@
         });
     }
     
-    // PRIVATE MESSAGES
+    // Запуск слушателя для конкретного личного чата (для загрузки истории)
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
         
@@ -592,32 +589,91 @@
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
             
-            // Проверяем, нужно ли показать уведомление
-            const isForMe = data.toId === userId;
-            const isNotFromMe = data.fromId !== userId;
-            const lastRead = lastReadTime.get(targetId) || 0;
-            const isNew = data.timestamp > lastRead;
-            const isNotActive = currentChat.type !== "private" || currentChat.id !== targetId;
-            
-            if (isForMe && isNotFromMe && isNew && isNotActive) {
-                renderTabs(); // Обновляем отображение счетчика
-                showToast(`📩 Новое сообщение от ${data.username}`);
-            }
-            
-            // Update UI if this chat is active
             if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
                 });
                 scrollToBottom();
-                // Обновляем время прочтения для активного чата
                 updateLastRead();
             }
         };
         
         onChildAdded(chatQuery, callback);
         privateListeners.set(targetId, { ref: chatQuery, callback });
+    }
+    
+    // ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ ДЛЯ НОВЫХ ПРИВАТНЫХ СООБЩЕНИЙ
+    function startGlobalPrivateListener() {
+        if (globalPrivateListener) return;
+        
+        const privateMessagesRef = ref(db, "private_messages");
+        
+        globalPrivateListener = onChildAdded(privateMessagesRef, (snapshot) => {
+            const data = snapshot.val();
+            const msgId = snapshot.key;
+            
+            if (!data || !data.text) return;
+            
+            // Проверяем, это сообщение для текущего пользователя?
+            if (data.toId === userId && data.fromId !== userId) {
+                const senderId = data.fromId;
+                const senderName = data.username;
+                
+                console.log("📨 Новое сообщение от:", senderName, "ID:", senderId);
+                
+                // Проверяем, открыт ли уже этот чат
+                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
+                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
+                
+                if (!isTabOpen) {
+                    // Создаем новую вкладку
+                    openTabs.push({ type: "private", id: senderId, name: senderName });
+                    saveTabs();
+                    renderTabs();
+                    showToast(`📩 Новое сообщение от ${senderName} (добавлена вкладка)`);
+                } else if (!isActive) {
+                    // Вкладка есть, но не активна - показываем уведомление
+                    showToast(`📩 Новое сообщение от ${senderName}`);
+                    renderTabs(); // Обновляем счетчик
+                }
+                
+                // Если у нас еще нет истории этого чата, загружаем её
+                if (!privateMessages.has(senderId)) {
+                    startPrivateListener(senderId);
+                } else {
+                    // Обновляем кэш сообщений
+                    let msgs = privateMessages.get(senderId) || [];
+                    msgs.push({
+                        id: msgId,
+                        username: data.username,
+                        text: data.text,
+                        timestamp: data.timestamp,
+                        fromId: data.fromId,
+                        toId: data.toId
+                    });
+                    msgs.sort((a, b) => a.timestamp - b.timestamp);
+                    privateMessages.set(senderId, msgs);
+                    
+                    if (!privateMessageIds.has(senderId)) {
+                        privateMessageIds.set(senderId, new Set());
+                    }
+                    privateMessageIds.get(senderId).add(msgId);
+                    
+                    // Если этот чат активен, обновляем UI
+                    if (isActive) {
+                        messagesArea.innerHTML = '';
+                        msgs.forEach(msg => {
+                            addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
+                        });
+                        scrollToBottom();
+                        updateLastRead();
+                    } else {
+                        renderTabs();
+                    }
+                }
+            }
+        });
     }
     
     // SEND MESSAGE
@@ -647,7 +703,6 @@
                 fromId: userId,
                 toId: currentChat.id
             });
-            // Обновляем время прочтения для своих сообщений
             updateLastRead();
         }
         messageInput.value = "";
@@ -715,6 +770,7 @@
     loadTabs();
     loadLastRead();
     startGlobalListener();
+    startGlobalPrivateListener(); // ВАЖНО: запускаем глобальный слушатель приватных сообщений
     updateStatus();
     setInterval(updateStatus, 30000);
     
