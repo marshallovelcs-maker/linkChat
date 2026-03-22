@@ -112,11 +112,12 @@
             display: flex;
             flex-direction: column;
             max-width: 75%;
+            width: fit-content;
         }
 
         .message.own {
             align-self: flex-end;
-            align-items: flex-end;
+            margin-left: auto;
         }
 
         .message-bubble {
@@ -127,6 +128,9 @@
             font-size: 0.95rem;
             line-height: 1.45;
             border: 1px solid #2a2a2a;
+            display: inline-block;
+            width: fit-content;
+            max-width: 100%;
         }
 
         .message.own .message-bubble {
@@ -140,10 +144,13 @@
             color: #888888;
             margin-top: 0.3rem;
             padding: 0 0.2rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .message.own .message-sender {
-            text-align: right;
+            justify-content: flex-end;
         }
 
         .sender-name {
@@ -157,7 +164,6 @@
 
         .message-time {
             color: #666666;
-            margin-left: 0.5rem;
         }
 
         .system-message {
