@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LinkChat — Облачный чат</title>
+    <title>LinkChat — Глобальный чат</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -18,7 +18,7 @@
         .chat {
             width: 100%;
             max-width: 900px;
-            height: 85vh;
+            height: 90vh;
             background: rgba(15, 23, 42, 0.9);
             border-radius: 2rem;
             display: flex;
@@ -47,6 +47,13 @@
             border-radius: 40px;
             font-size: 0.7rem;
             color: #94a3b8;
+        }
+        .online-badge {
+            background: #15803d;
+            padding: 5px 12px;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            color: #bbf7d0;
         }
         .copy-btn {
             background: #334155;
@@ -151,7 +158,8 @@
     <div class="header">
         <div style="display: flex; gap: 12px; align-items: baseline;">
             <h1>🌐 LinkChat</h1>
-            <div class="badge">облачный чат</div>
+            <div class="badge">глобальный чат</div>
+            <div class="online-badge" id="onlineCount">🟢 0 онлайн</div>
         </div>
         <button class="copy-btn" id="copyLink">🔗 Поделиться ссылкой</button>
     </div>
@@ -181,36 +189,52 @@
     const firebaseConfig = {
         apiKey: "AIzaSyACbUMNMGOQLg-iCDVuceIcld7UJTayYqU",
         authDomain: "chat-f3029.firebaseapp.com",
+        databaseURL: "https://chat-f3029-default-rtdb.firebaseio.com",
         projectId: "chat-f3029",
         storageBucket: "chat-f3029.firebasestorage.app",
         messagingSenderId: "150747577754",
         appId: "1:150747577754:web:0e6c56767327f0dbd30e23"
     };
 
+    // Инициализация
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const messagesRef = ref(db, "chat_messages");
     
+    // Ссылки на данные
+    const messagesRef = ref(db, "messages");
+    
+    // DOM элементы
     const messagesDiv = document.getElementById("messages");
     const usernameInput = document.getElementById("username");
     const messageInput = document.getElementById("message");
     const sendBtn = document.getElementById("send");
     const copyBtn = document.getElementById("copyLink");
+    const onlineCountSpan = document.getElementById("onlineCount");
     
-    let userId = localStorage.getItem("user_id");
+    // Уникальный ID пользователя
+    let userId = localStorage.getItem("linkchat_user_id");
     if (!userId) {
-        userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6);
-        localStorage.setItem("user_id", userId);
+        userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 8);
+        localStorage.setItem("linkchat_user_id", userId);
     }
     
-    let currentName = localStorage.getItem("chat_name") || "Гость_" + Math.floor(Math.random() * 1000);
+    // Имя пользователя
+    let currentName = localStorage.getItem("linkchat_name") || "Гость_" + Math.floor(Math.random() * 1000);
     usernameInput.value = currentName;
     
     usernameInput.addEventListener("change", () => {
         currentName = usernameInput.value.trim() || "Аноним";
-        localStorage.setItem("chat_name", currentName);
+        localStorage.setItem("linkchat_name", currentName);
+        
+        // Обновляем имя в статусе
+        const userStatusRef = ref(db, `users/${userId}`);
+        set(userStatusRef, {
+            name: currentName,
+            lastSeen: Date.now()
+        });
     });
     
+    // Функция добавления сообщения
     function addMessage(name, text, timestamp, isOwn = false) {
         const msgDiv = document.createElement("div");
         msgDiv.className = `message ${isOwn ? "own" : ""}`;
@@ -225,7 +249,7 @@
             </div>
         `;
         messagesDiv.appendChild(msgDiv);
-        msgDiv.scrollIntoView({ behavior: "smooth", block: "end" });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
     
     function addSystemMsg(text) {
@@ -233,7 +257,7 @@
         sys.className = "system-msg";
         sys.innerHTML = `💬 ${escapeHtml(text)}`;
         messagesDiv.appendChild(sys);
-        sys.scrollIntoView({ behavior: "smooth", block: "end" });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
     
     function escapeHtml(str) {
@@ -246,15 +270,21 @@
         });
     }
     
+    // Отправка сообщения
     function sendMessage() {
         const text = messageInput.value.trim();
         if (!text) return;
         
+        const name = currentName.trim() || "Аноним";
+        
         push(messagesRef, {
-            name: currentName,
+            name: name,
             text: text,
-            time: Date.now(),
+            timestamp: Date.now(),
             userId: userId
+        }).catch(error => {
+            console.error("Ошибка отправки:", error);
+            addSystemMsg("❌ Ошибка отправки. Проверьте правила Firebase!");
         });
         
         messageInput.value = "";
@@ -271,41 +301,63 @@
         addSystemMsg("✅ Ссылка скопирована! Поделитесь с друзьями.");
     });
     
+    // Загрузка последних 100 сообщений
     const recentQuery = query(messagesRef, limitToLast(100));
     
+    let firstLoad = true;
     onChildAdded(recentQuery, (snapshot) => {
         const data = snapshot.val();
         const isOwn = (data.userId === userId);
-        addMessage(data.name, data.text, data.time, isOwn);
-    });
-    
-    // Статус онлайн
-    const statusRef = ref(db, `online/${userId}`);
-    set(statusRef, { name: currentName, lastSeen: Date.now() });
-    
-    onValue(ref(db, "online"), (snapshot) => {
-        const users = snapshot.val();
-        if (users) {
-            const now = Date.now();
-            let online = 0;
-            for (let id in users) {
-                if (now - (users[id].lastSeen || 0) < 60000) online++;
-                else remove(ref(db, `online/${id}`));
+        addMessage(data.name, data.text, data.timestamp, isOwn);
+        
+        // Удаляем загрузочное сообщение
+        if (firstLoad) {
+            const loadingMsg = messagesDiv.querySelector(".system-msg");
+            if (loadingMsg && loadingMsg.innerText.includes("Подключение")) {
+                loadingMsg.remove();
             }
-            const statusDiv = document.querySelector(".system-msg:first-child");
-            if (statusDiv) statusDiv.innerHTML = `🟢 Онлайн: ${online} человек. Чат работает глобально!`;
+            firstLoad = false;
         }
     });
     
-    setInterval(() => {
-        set(statusRef, { name: currentName, lastSeen: Date.now() });
-    }, 30000);
+    // Статус онлайн
+    const userStatusRef = ref(db, `users/${userId}`);
+    set(userStatusRef, { name: currentName, lastSeen: Date.now() });
     
-    window.addEventListener("beforeunload", () => {
-        remove(statusRef);
+    onValue(ref(db, "users"), (snapshot) => {
+        const users = snapshot.val();
+        if (users) {
+            const now = Date.now();
+            let onlineCount = 0;
+            for (let id in users) {
+                if (now - (users[id].lastSeen || 0) < 60000) {
+                    onlineCount++;
+                } else {
+                    remove(ref(db, `users/${id}`));
+                }
+            }
+            onlineCountSpan.innerHTML = `🟢 ${onlineCount} онлайн`;
+        } else {
+            onlineCountSpan.innerHTML = `🟢 0 онлайн`;
+        }
     });
     
-    addSystemMsg(`Добро пожаловать, ${currentName}! Поделитесь ссылкой с друзьями.`);
+    // Обновление статуса каждые 30 секунд
+    setInterval(() => {
+        set(userStatusRef, { name: currentName, lastSeen: Date.now() });
+    }, 30000);
+    
+    // Удаляем при закрытии
+    window.addEventListener("beforeunload", () => {
+        remove(userStatusRef);
+    });
+    
+    addSystemMsg(`👋 Добро пожаловать, ${currentName}! Чат работает глобально.`);
+    
+    // Проверка подключения к Firebase
+    setTimeout(() => {
+        console.log("Firebase подключен, проверка...");
+    }, 1000);
 </script>
 </body>
 </html>
