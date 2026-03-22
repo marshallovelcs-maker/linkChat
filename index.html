@@ -296,13 +296,9 @@
     // Unread counts
     let unreadCounts = new Map();
     
-    // Для отслеживания только новых сообщений
-    let lastProcessedTimestamp = Date.now();
-    
     // Listeners
     let globalListener = null;
     let privateListeners = new Map();
-    let globalPrivateListener = null;
     
     // Save/Load
     function saveTabs() {
@@ -536,6 +532,40 @@
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
             
+            // ВАЖНО: Здесь проверяем, нужно ли показать уведомление
+            // Если сообщение для меня и не от меня, и чат не активен
+            if (data.toId === userId && data.fromId !== userId) {
+                const isActive = (currentChat.type === "private" && currentChat.id === targetId);
+                if (!isActive) {
+                    // Увеличиваем счетчик непрочитанных
+                    const current = unreadCounts.get(targetId) || 0;
+                    unreadCounts.set(targetId, current + 1);
+                    saveUnread();
+                    renderTabs();
+                    showToast(`💬 Новое сообщение от ${data.username}`);
+                    
+                    // Если вкладки нет - добавляем
+                    const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === targetId);
+                    if (!isTabOpen) {
+                        openTabs.push({ type: "private", id: targetId, name: data.username });
+                        saveTabs();
+                        renderTabs();
+                    }
+                    
+                    // Системное сообщение в общий чат
+                    const sysDiv = document.createElement("div");
+                    sysDiv.className = "system";
+                    sysDiv.style.background = "#2a5a2a";
+                    sysDiv.style.color = "#ffaa33";
+                    sysDiv.style.border = "1px solid #ffaa33";
+                    sysDiv.style.padding = "0.5rem";
+                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(data.username)}! Нажмите на вкладку "${escapeHtml(data.username)}" чтобы прочитать.`;
+                    messagesArea.appendChild(sysDiv);
+                    messagesArea.scrollTop = messagesArea.scrollHeight;
+                    setTimeout(() => sysDiv.remove(), 8000);
+                }
+            }
+            
             if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
@@ -546,118 +576,6 @@
         
         onChildAdded(chatQuery, callback);
         privateListeners.set(targetId, { ref: chatQuery, callback });
-    }
-    
-    // ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ ДЛЯ НОВЫХ ПРИВАТНЫХ СООБЩЕНИЙ
-    function startNotificationListener() {
-        if (globalPrivateListener) return;
-        
-        console.log("🔔 Запуск слушателя уведомлений");
-        
-        // Сохраняем время запуска, чтобы игнорировать старые сообщения
-        const startTime = Date.now();
-        
-        const privateMessagesRef = ref(db, "private_messages");
-        
-        globalPrivateListener = onChildAdded(privateMessagesRef, (snapshot) => {
-            const data = snapshot.val();
-            const msgId = snapshot.key;
-            
-            if (!data || !data.text) return;
-            
-            // ИГНОРИРУЕМ СТАРЫЕ СООБЩЕНИЯ (те, что были до запуска)
-            if (data.timestamp && data.timestamp < startTime - 5000) {
-                console.log("⏭️ Пропускаем старое сообщение:", data.timestamp);
-                return;
-            }
-            
-            // Проверяем, сообщение для текущего пользователя и не от себя
-            if (data.toId === userId && data.fromId !== userId) {
-                const senderId = data.fromId;
-                const senderName = data.username;
-                
-                console.log(`✅ НОВОЕ СООБЩЕНИЕ ДЛЯ ВАС от ${senderName} (время: ${data.timestamp})`);
-                
-                // Добавляем в кэш если нужно
-                if (!privateMessages.has(senderId)) {
-                    privateMessages.set(senderId, []);
-                    privateMessageIds.set(senderId, new Set());
-                }
-                
-                const msgs = privateMessages.get(senderId);
-                const msgIdsSet = privateMessageIds.get(senderId);
-                
-                if (!msgIdsSet.has(msgId)) {
-                    msgIdsSet.add(msgId);
-                    msgs.push({
-                        id: msgId,
-                        username: data.username,
-                        text: data.text,
-                        timestamp: data.timestamp,
-                        fromId: data.fromId,
-                        toId: data.toId
-                    });
-                    msgs.sort((a, b) => a.timestamp - b.timestamp);
-                    privateMessages.set(senderId, msgs);
-                }
-                
-                // Проверяем, открыта ли вкладка
-                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
-                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
-                
-                console.log(`📊 isTabOpen=${isTabOpen}, isActive=${isActive}`);
-                
-                if (!isTabOpen) {
-                    // СОЗДАЕМ НОВУЮ ВКЛАДКУ
-                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
-                    openTabs.push({ type: "private", id: senderId, name: senderName });
-                    saveTabs();
-                    
-                    // Увеличиваем счетчик
-                    const current = unreadCounts.get(senderId) || 0;
-                    unreadCounts.set(senderId, current + 1);
-                    saveUnread();
-                    
-                    // ОБНОВЛЯЕМ ВКЛАДКИ
-                    renderTabs();
-                    
-                    // ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ
-                    showToast(`💬 Новое сообщение от ${senderName}`);
-                    
-                    // СИСТЕМНОЕ СООБЩЕНИЕ В ОБЩИЙ ЧАТ
-                    const sysDiv = document.createElement("div");
-                    sysDiv.className = "system";
-                    sysDiv.style.background = "#2a5a2a";
-                    sysDiv.style.color = "#ffaa33";
-                    sysDiv.style.border = "1px solid #ffaa33";
-                    sysDiv.style.padding = "0.5rem";
-                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
-                    messagesArea.appendChild(sysDiv);
-                    messagesArea.scrollTop = messagesArea.scrollHeight;
-                    setTimeout(() => sysDiv.remove(), 8000);
-                    
-                } else if (!isActive) {
-                    // Вкладка есть, увеличиваем счетчик
-                    console.log(`🔔 Увеличиваю счетчик для ${senderName}`);
-                    const current = unreadCounts.get(senderId) || 0;
-                    unreadCounts.set(senderId, current + 1);
-                    saveUnread();
-                    renderTabs();
-                    showToast(`💬 Новое сообщение от ${senderName}`);
-                }
-                
-                // Если чат активен, обновляем UI
-                if (isActive) {
-                    console.log(`🔄 Обновляю UI для ${senderName}`);
-                    messagesArea.innerHTML = '';
-                    msgs.forEach(msg => {
-                        addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
-                    });
-                }
-            }
-        });
-        
-        console.log("✅ Слушатель уведомлений запущен, время старта:", new Date(startTime).toLocaleTimeString());
     }
     
     // Отправка сообщения
@@ -755,7 +673,6 @@
     loadTabs();
     loadUnread();
     startGlobalListener();
-    startNotificationListener();
     updateStatus();
     setInterval(updateStatus, 30000);
     
@@ -787,8 +704,6 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
-    console.log("💡 Откройте другую вкладку и отправьте сообщение");
-    console.log("⏰ Слушатель будет реагировать только на сообщения, отправленные после запуска");
 </script>
 </body>
 </html>
