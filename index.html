@@ -489,11 +489,76 @@
     let activePrivateListeners = new Map();
     let globalListenerActive = false;
     
-    // Хранилище непрочитанных сообщений
+    // Хранилище непрочитанных сообщений (с сохранением в localStorage)
     let unreadMessages = new Map();
+    const UNREAD_STORAGE_KEY = "fembo_unread_messages";
     
-    // Отслеживаем все возможные приватные чаты пользователя
-    let trackedChats = new Set();
+    // Загрузка непрочитанных сообщений из localStorage
+    function loadUnreadFromStorage() {
+        try {
+            const saved = localStorage.getItem(UNREAD_STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                unreadMessages.clear();
+                Object.entries(parsed).forEach(([key, value]) => {
+                    unreadMessages.set(key, value);
+                });
+                console.log("📦 Загружены непрочитанные:", Array.from(unreadMessages.entries()));
+            }
+        } catch (e) {
+            console.error("Ошибка загрузки непрочитанных:", e);
+        }
+    }
+    
+    // Сохранение непрочитанных сообщений в localStorage
+    function saveUnreadToStorage() {
+        try {
+            const obj = {};
+            unreadMessages.forEach((value, key) => {
+                obj[key] = value;
+            });
+            localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify(obj));
+        } catch (e) {
+            console.error("Ошибка сохранения непрочитанных:", e);
+        }
+    }
+    
+    // Увеличение счетчика непрочитанных
+    function incrementUnread(chatId, senderName) {
+        const key = `private_${chatId}`;
+        const current = unreadMessages.get(key) || 0;
+        unreadMessages.set(key, current + 1);
+        saveUnreadToStorage();
+        
+        // Обновляем отображение вкладки
+        const tabIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === chatId);
+        if (tabIndex !== -1 && tabIndex !== activeTabIndex) {
+            renderTabs();
+        }
+        
+        showToast(`📩 Новое сообщение от ${senderName}`);
+    }
+    
+    // Сброс непрочитанных для чата
+    function clearUnread(chatId) {
+        const key = `private_${chatId}`;
+        if (unreadMessages.has(key)) {
+            unreadMessages.delete(key);
+            saveUnreadToStorage();
+            console.log(`✅ Сброшены непрочитанные для чата ${chatId}`);
+            
+            // Обновляем отображение вкладки
+            const tabIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === chatId);
+            if (tabIndex !== -1) {
+                renderTabs();
+            }
+        }
+    }
+    
+    // Получение количества непрочитанных для чата
+    function getUnreadCount(chatId) {
+        return unreadMessages.get(`private_${chatId}`) || 0;
+    }
     
     function showToast(text) {
         let toast = document.querySelector(".toast-msg");
@@ -510,9 +575,8 @@
     
     function renderTabs() {
         tabsContainer.innerHTML = openTabs.map((tab, index) => {
-            const unreadKey = tab.type === "private" ? `private_${tab.id}` : null;
-            const unreadCount = unreadKey ? (unreadMessages.get(unreadKey) || 0) : 0;
-            const isBlinking = unreadKey && unreadMessages.has(unreadKey) && index !== activeTabIndex;
+            const unreadCount = tab.type === "private" ? getUnreadCount(tab.id) : 0;
+            const isBlinking = unreadCount > 0 && index !== activeTabIndex;
             
             return `
                 <div class="tab ${index === activeTabIndex ? 'active' : ''} ${isBlinking ? 'blinking' : ''}" data-index="${index}">
@@ -538,17 +602,12 @@
     
     // Функция для добавления нового личного чата
     function addPrivateChat(senderId, senderName, showNotification = true) {
-        // Проверяем, существует ли уже такая вкладка
         const existingIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === senderId);
         
         if (existingIndex !== -1) {
-            // Вкладка уже существует
+            // Вкладка уже существует, но если она не активна, увеличиваем счетчик
             if (existingIndex !== activeTabIndex && showNotification) {
-                const unreadKey = `private_${senderId}`;
-                const currentCount = unreadMessages.get(unreadKey) || 0;
-                unreadMessages.set(unreadKey, currentCount + 1);
-                renderTabs();
-                showToast(`📩 Новое сообщение от ${senderName}`);
+                incrementUnread(senderId, senderName);
             }
             return;
         }
@@ -561,21 +620,15 @@
         });
         
         if (showNotification) {
-            const unreadKey = `private_${senderId}`;
-            unreadMessages.set(unreadKey, 1);
-            showToast(`📩 Новое сообщение от ${senderName} (добавлена вкладка)`);
+            incrementUnread(senderId, senderName);
         }
         
         renderTabs();
-        
-        // Не переключаем на новую вкладку автоматически
     }
     
     function switchToTab(index) {
-        // Останавливаем текущий слушатель
-        if (currentChat.type === "global" && globalListenerActive) {
-            // Глобальный слушатель не отключаем, он всегда активен
-        } else if (currentChat.type === "private") {
+        // Останавливаем текущий слушатель личного чата
+        if (currentChat.type === "private") {
             const listener = activePrivateListeners.get(currentChat.id);
             if (listener) {
                 off(listener.queryRef, 'child_added', listener.callback);
@@ -583,16 +636,14 @@
             }
         }
         
-        activeTabIndex = index;
-        currentChat = openTabs[index];
-        
-        // Сбрасываем непрочитанные для этого чата
-        if (currentChat.type === "private") {
-            const unreadKey = `private_${currentChat.id}`;
-            if (unreadMessages.has(unreadKey)) {
-                unreadMessages.delete(unreadKey);
-            }
+        // Сбрасываем непрочитанные для чата, на который переключаемся
+        const newChat = openTabs[index];
+        if (newChat.type === "private") {
+            clearUnread(newChat.id);
         }
+        
+        activeTabIndex = index;
+        currentChat = newChat;
         
         renderTabs();
         
@@ -681,54 +732,62 @@
         }, 1000);
     }
     
-    // Функция для отслеживания всех приватных чатов пользователя
-    function setupAllPrivateChatsListener() {
-        // Получаем список всех пользователей, с которыми у нас есть чаты
-        const userChatsRef = ref(db, "private_messages");
+    // Функция для отслеживания новых личных сообщений
+    function setupPrivateMessagesListener() {
+        console.log("🔔 Запуск слушателя личных сообщений...");
         
-        onChildAdded(userChatsRef, (snapshot) => {
-            const chatId = snapshot.key;
-            const chatData = snapshot.val();
+        // Слушаем все приватные сообщения в базе
+        const privateMessagesRef = ref(db, "private_messages");
+        
+        onChildAdded(privateMessagesRef, (snapshot) => {
+            const data = snapshot.val();
+            const messageId = snapshot.key;
             
-            // Определяем, участвует ли текущий пользователь в этом чате
-            if (chatId.includes(userId)) {
-                // Находим ID собеседника
-                const otherId = chatId.replace(userId, '').replace('_', '').replace('user_', 'user_');
-                const cleanOtherId = otherId.startsWith('_') ? otherId.substring(1) : otherId;
+            // Проверяем, что сообщение адресовано текущему пользователю и не от него самого
+            if (data && data.toId === userId && data.fromId !== userId) {
+                console.log("📨 Новое личное сообщение от:", data.username, "ID:", messageId);
                 
-                // Получаем имя собеседника из последнего сообщения
-                const lastMessage = chatData ? Object.values(chatData).pop() : null;
-                const otherName = lastMessage ? lastMessage.username : "Пользователь";
+                // Проверяем, не прочитано ли уже это сообщение
+                const readKey = `read_${userId}_${messageId}`;
+                const isRead = localStorage.getItem(readKey);
                 
-                // Добавляем чат в отслеживаемые
-                if (!trackedChats.has(cleanOtherId)) {
-                    trackedChats.add(cleanOtherId);
+                if (!isRead) {
+                    // Добавляем или обновляем вкладку с уведомлением
+                    addPrivateChat(data.fromId, data.username, true);
+                    
+                    // Помечаем сообщение как прочитанное при открытии чата
+                    // Сохраняем ID сообщения, чтобы при обновлении не показывать повторно
+                    localStorage.setItem(readKey, "true");
+                    
+                    // Очищаем старые записи (оставляем только последние 100)
+                    cleanOldReadMessages();
                 }
-                
-                // Начинаем слушать новые сообщения в этом чате
-                listenToPrivateChat(cleanOtherId, otherName);
             }
         });
     }
     
-    // Слушаем конкретный приватный чат на новые сообщения
-    function listenToPrivateChat(otherUserId, otherUserName) {
-        const chatId = [userId, otherUserId].sort().join('_');
-        const privateChatRef = ref(db, `private_messages/${chatId}`);
-        
-        // Используем onChildAdded для отслеживания только новых сообщений
-        const messagesQuery = query(privateChatRef);
-        
-        onChildAdded(messagesQuery, (snapshot) => {
-            const data = snapshot.val();
-            if (data && data.toId === userId && data.fromId !== userId) {
-                // Это сообщение для текущего пользователя
-                console.log("🔔 Новое личное сообщение от:", data.username);
-                
-                // Добавляем или обновляем вкладку с уведомлением
-                addPrivateChat(otherUserId, data.username, true);
+    // Очистка старых записей о прочитанных сообщениях
+    function cleanOldReadMessages() {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(`read_${userId}_`)) {
+                keys.push(key);
             }
-        });
+        }
+        
+        // Если записей больше 200, удаляем самые старые
+        if (keys.length > 200) {
+            keys.sort();
+            const toDelete = keys.slice(0, keys.length - 100);
+            toDelete.forEach(key => localStorage.removeItem(key));
+        }
+    }
+    
+    // При загрузке чата отмечаем все сообщения как прочитанные
+    function markChatAsRead(chatId) {
+        // При переключении на вкладку сбрасываем счетчик
+        clearUnread(chatId);
     }
     
     function addMessageToDOM(username, text, timestamp, isOwn = false) {
@@ -793,8 +852,8 @@
             activePrivateListeners.delete(tabToClose.id);
         }
         
-        const unreadKey = `private_${tabToClose.id}`;
-        unreadMessages.delete(unreadKey);
+        // Не удаляем непрочитанные при закрытии вкладки, они остаются в localStorage
+        // При следующем открытии чата они будут сброшены
         
         openTabs.splice(index, 1);
         
@@ -966,11 +1025,39 @@
     
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
     
-    // Запускаем отслеживание всех приватных чатов
-    setupAllPrivateChatsListener();
+    // Загружаем непрочитанные из localStorage
+    loadUnreadFromStorage();
+    
+    // Запускаем отслеживание новых личных сообщений
+    setupPrivateMessagesListener();
     
     // Загружаем общий чат
     loadGlobalMessages();
+    
+    // Восстанавливаем вкладки из сохраненных непрочитанных
+    function restoreTabsFromUnread() {
+        const unreadKeys = Array.from(unreadMessages.keys());
+        unreadKeys.forEach(key => {
+            const chatId = key.replace("private_", "");
+            // Получаем имя пользователя из allUsers
+            const userData = allUsers.get(chatId);
+            if (userData && !openTabs.some(tab => tab.type === "private" && tab.id === chatId)) {
+                openTabs.push({
+                    type: "private",
+                    id: chatId,
+                    name: userData.name
+                });
+            }
+        });
+        if (openTabs.length > 1) {
+            renderTabs();
+        }
+    }
+    
+    // Ждем загрузки списка пользователей
+    setTimeout(() => {
+        restoreTabsFromUnread();
+    }, 2000);
 </script>
 </body>
 </html>
