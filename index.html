@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Fembo — Чат</title>
+    <title>Fembo — Чат с личными сообщениями</title>
     <style>
         * {
             margin: 0;
@@ -22,15 +22,107 @@
         }
 
         .chat-container {
-            max-width: 1000px;
+            max-width: 1200px;
             width: 100%;
             height: 90vh;
             min-height: 550px;
             background: #0a0a0a;
             display: flex;
-            flex-direction: column;
             overflow: hidden;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Боковая панель */
+        .sidebar {
+            width: 280px;
+            background: #000000;
+            border-right: 1px solid #2a2a2a;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .sidebar-header h3 {
+            color: #ffffff;
+            font-size: 0.9rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .search-box {
+            width: 100%;
+            background: #111111;
+            border: 1px solid #2a2a2a;
+            padding: 0.6rem;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .search-box:focus {
+            border-color: #4a4a4a;
+        }
+
+        .online-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .online-user {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.7rem;
+            margin: 0.2rem 0;
+            background: #111111;
+            border: 1px solid #2a2a2a;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .online-user:hover {
+            background: #1a1a1a;
+            border-color: #4a4a4a;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-avatar {
+            font-size: 1.2rem;
+        }
+
+        .user-name {
+            color: #e0e0e0;
+            font-size: 0.85rem;
+        }
+
+        .online-dot {
+            width: 8px;
+            height: 8px;
+            background: #2ecc71;
+            border-radius: 50%;
+        }
+
+        .private-badge {
+            font-size: 0.7rem;
+            color: #888888;
+        }
+
+        /* Основная область */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         .chat-header {
@@ -48,15 +140,9 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            flex-wrap: wrap;
         }
 
         .logo {
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 24px;
         }
 
@@ -64,37 +150,52 @@
             font-size: 1.5rem;
             font-weight: 600;
             color: #ffffff;
-            letter-spacing: -0.5px;
         }
 
-        .online-badge {
-            background: #1a3a1a;
-            color: #90ee90;
-            padding: 0.25rem 0.8rem;
-            font-size: 0.75rem;
+        /* Вкладки */
+        .tabs {
             display: flex;
-            align-items: center;
-            gap: 6px;
-            border: 1px solid #2a5a2a;
+            background: #0a0a0a;
+            border-bottom: 1px solid #2a2a2a;
+            padding: 0 1rem;
+            gap: 0.5rem;
+            overflow-x: auto;
         }
 
-        .copy-link-btn {
-            background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            color: #e0e0e0;
-            font-size: 0.85rem;
-            padding: 0.5rem 1.2rem;
+        .tab {
+            padding: 0.7rem 1.2rem;
+            background: #111111;
+            border: 1px solid #2a2a2a;
+            border-bottom: none;
+            color: #aaaaaa;
             cursor: pointer;
-            font-weight: 500;
+            font-size: 0.85rem;
+            white-space: nowrap;
             transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
-        .copy-link-btn:hover {
-            background: #3a3a3a;
-            border-color: #5a5a5a;
+        .tab.active {
+            background: #1a1a1a;
+            color: #ffffff;
+            border-color: #4a4a4a;
+            border-bottom-color: #1a1a1a;
+            margin-bottom: -1px;
+        }
+
+        .tab:hover:not(.active) {
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        .close-tab {
+            margin-left: 8px;
+            color: #888888;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .close-tab:hover {
+            color: #ff8888;
         }
 
         .messages-area {
@@ -158,10 +259,6 @@
             color: #aaaaaa;
         }
 
-        .message.own .sender-name {
-            color: #cccccc;
-        }
-
         .message-time {
             color: #666666;
         }
@@ -185,37 +282,10 @@
             display: flex;
             gap: 0.75rem;
             align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .name-input-wrapper {
-            display: flex;
-            background: #111111;
-            padding: 0.1rem 0.1rem 0.1rem 1rem;
-            align-items: center;
-            gap: 0.3rem;
-            flex: 1 1 150px;
-            border: 1px solid #2a2a2a;
-        }
-
-        .name-input-wrapper span {
-            color: #666666;
-            font-size: 0.9rem;
-        }
-
-        #usernameInput {
-            background: transparent;
-            border: none;
-            padding: 0.7rem 0.2rem 0.7rem 0;
-            color: #e0e0e0;
-            font-size: 0.9rem;
-            outline: none;
-            width: 100%;
-            font-weight: 400;
         }
 
         .message-input-wrapper {
-            flex: 4;
+            flex: 1;
             display: flex;
             background: #111111;
             align-items: center;
@@ -242,13 +312,6 @@
             cursor: pointer;
             transition: all 0.2s;
             font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        button:active {
-            transform: scale(0.97);
         }
 
         button:hover {
@@ -268,6 +331,18 @@
             background: #2a2a2a;
         }
 
+        .online-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .online-list::-webkit-scrollbar-track {
+            background: #000000;
+        }
+
+        .online-list::-webkit-scrollbar-thumb {
+            background: #2a2a2a;
+        }
+
         .toast-msg {
             position: fixed;
             bottom: 20px;
@@ -280,31 +355,14 @@
             font-size: 0.85rem;
             pointer-events: none;
             z-index: 999;
-            transition: opacity 0.2s;
         }
 
-        @media (max-width: 600px) {
-            .chat-container {
-                height: 95vh;
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 220px;
             }
             .message {
                 max-width: 95%;
-            }
-            .input-area {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 0.6rem;
-            }
-            .name-input-wrapper, .message-input-wrapper {
-                width: 100%;
-            }
-            button {
-                justify-content: center;
-            }
-            .toast-msg {
-                white-space: normal;
-                max-width: 90%;
-                text-align: center;
             }
         }
     </style>
@@ -312,32 +370,44 @@
 <body>
 
 <div class="chat-container">
-    <div class="chat-header">
-        <div class="brand">
-            <div class="logo">🦊</div>
-            <h1>Fembo</h1>
-            <div class="online-badge" id="onlineStatus">
-                <span>●</span> <span id="onlineCount">0</span>
+    <!-- Боковая панель с онлайн пользователями -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3>◼ Онлайн</h3>
+            <input type="text" id="searchUsers" class="search-box" placeholder="Поиск по нику...">
+        </div>
+        <div class="online-list" id="onlineList">
+            <div class="system-message" style="margin: 1rem;">Загрузка...</div>
+        </div>
+    </div>
+
+    <!-- Основная область -->
+    <div class="main-area">
+        <div class="chat-header">
+            <div class="brand">
+                <div class="logo">🦊</div>
+                <h1>Fembo</h1>
             </div>
+            <button class="copy-link-btn" id="copyLinkButton">⎘ Поделиться</button>
         </div>
-        <button class="copy-link-btn" id="copyLinkButton">
-            ⎘ Поделиться
-        </button>
-    </div>
 
-    <div class="messages-area" id="messagesArea">
-        <div class="system-message">◼ Подключение к чату...</div>
-    </div>
+        <!-- Вкладки -->
+        <div class="tabs" id="tabsContainer">
+            <div class="tab active" data-chat="global"># Общий чат</div>
+        </div>
 
-    <div class="input-area">
-        <div class="name-input-wrapper">
-            <span>◼</span>
-            <input type="text" id="usernameInput" placeholder="Ваше имя" maxlength="24" autocomplete="off">
+        <!-- Область сообщений -->
+        <div class="messages-area" id="messagesArea">
+            <div class="system-message">◼ Выберите чат или напишите сообщение в общий чат</div>
         </div>
-        <div class="message-input-wrapper">
-            <input type="text" id="messageInput" placeholder="Напишите сообщение..." maxlength="500" autocomplete="off">
+
+        <!-- Поле ввода -->
+        <div class="input-area">
+            <div class="message-input-wrapper">
+                <input type="text" id="messageInput" placeholder="Напишите сообщение..." maxlength="500">
+            </div>
+            <button id="sendButton">◼ Отправить</button>
         </div>
-        <button id="sendButton">◼ Отправить</button>
     </div>
 </div>
 
@@ -352,7 +422,7 @@
 
 <script type="module">
     import { initializeApp } from "firebase/app";
-    import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, remove } from "firebase/database";
+    import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, remove, get } from "firebase/database";
 
     const firebaseConfig = {
         apiKey: "AIzaSyACbUMNMGOQLg-iCDVuceIcld7UJTayYqU",
@@ -366,39 +436,217 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const messagesRef = ref(db, "messages");
     
+    const messagesRef = ref(db, "messages");
+    const privateMessagesRef = ref(db, "private_messages");
+    
+    // DOM элементы
     const messagesArea = document.getElementById("messagesArea");
-    const usernameInput = document.getElementById("usernameInput");
     const messageInput = document.getElementById("messageInput");
     const sendBtn = document.getElementById("sendButton");
     const copyLinkBtn = document.getElementById("copyLinkButton");
-    const onlineCountSpan = document.getElementById("onlineCount");
+    const onlineListDiv = document.getElementById("onlineList");
+    const searchInput = document.getElementById("searchUsers");
+    const tabsContainer = document.getElementById("tabsContainer");
     
-    let userId = localStorage.getItem("linkchat_user_id");
+    let userId = localStorage.getItem("fembo_user_id");
     if (!userId) {
         userId = "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 8);
-        localStorage.setItem("linkchat_user_id", userId);
+        localStorage.setItem("fembo_user_id", userId);
     }
     
-    let currentUsername = localStorage.getItem("linkchat_username") || "Гость_" + Math.floor(Math.random() * 1000);
-    usernameInput.value = currentUsername;
+    let currentUsername = localStorage.getItem("fembo_username") || "Гость_" + Math.floor(Math.random() * 1000);
     
-    usernameInput.addEventListener("change", (e) => {
-        let newName = e.target.value.trim();
-        if (newName === "") newName = "Аноним";
-        if (newName.length > 24) newName = newName.slice(0, 24);
-        currentUsername = newName;
-        localStorage.setItem("linkchat_username", currentUsername);
-        
+    // Состояние чата
+    let currentChat = { type: "global", id: null, name: "Общий чат" };
+    let privateChats = new Map(); // { userId: { name, unread, lastMessage } }
+    let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
+    let activeTabIndex = 0;
+    let allUsers = new Map();
+    
+    // Модальное окно для ввода имени
+    function showNamePrompt() {
+        const name = prompt("Введите ваше имя:", currentUsername);
+        if (name && name.trim()) {
+            currentUsername = name.trim().slice(0, 24);
+            localStorage.setItem("fembo_username", currentUsername);
+            updateUserStatus();
+        }
+    }
+    
+    setTimeout(() => {
+        if (currentUsername === "Гость_" + currentUsername.split("_")[1]) {
+            showNamePrompt();
+        }
+    }, 500);
+    
+    function updateUserStatus() {
         const userStatusRef = ref(db, `users/${userId}`);
         set(userStatusRef, {
             username: currentUsername,
-            lastSeen: Date.now()
+            lastSeen: Date.now(),
+            userId: userId
+        });
+    }
+    
+    // Отслеживание онлайн пользователей
+    onValue(ref(db, "users"), (snapshot) => {
+        const users = snapshot.val();
+        allUsers.clear();
+        if (users) {
+            const now = Date.now();
+            for (let id in users) {
+                if (now - (users[id].lastSeen || 0) < 60000) {
+                    if (id !== userId) {
+                        allUsers.set(id, users[id].username);
+                    }
+                } else {
+                    remove(ref(db, `users/${id}`));
+                }
+            }
+        }
+        renderOnlineList();
+    });
+    
+    function renderOnlineList() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const onlineUsers = Array.from(allUsers.entries()).filter(([id, name]) => 
+            name.toLowerCase().includes(searchTerm)
+        );
+        
+        if (onlineUsers.length === 0) {
+            onlineListDiv.innerHTML = '<div class="system-message" style="margin: 1rem;">◼ Нет пользователей онлайн</div>';
+            return;
+        }
+        
+        onlineListDiv.innerHTML = onlineUsers.map(([id, name]) => `
+            <div class="online-user" data-user-id="${id}" data-user-name="${name}">
+                <div class="user-info">
+                    <span class="user-avatar">🦊</span>
+                    <span class="user-name">${escapeHtml(name)}</span>
+                </div>
+                <div class="online-dot"></div>
+            </div>
+        `).join('');
+        
+        // Добавляем обработчики кликов
+        document.querySelectorAll('.online-user').forEach(el => {
+            el.addEventListener('click', () => {
+                const targetId = el.dataset.userId;
+                const targetName = el.dataset.userName;
+                openPrivateChat(targetId, targetName);
+            });
+        });
+    }
+    
+    searchInput.addEventListener("input", renderOnlineList);
+    
+    // Открытие личного чата
+    function openPrivateChat(targetUserId, targetUserName) {
+        const chatId = [userId, targetUserId].sort().join('_');
+        
+        // Проверяем, открыт ли уже этот чат
+        const existingTab = openTabs.find(tab => tab.type === "private" && tab.id === targetUserId);
+        if (existingTab) {
+            // Переключаемся на существующую вкладку
+            const index = openTabs.findIndex(t => t === existingTab);
+            switchToTab(index);
+            return;
+        }
+        
+        // Добавляем новую вкладку
+        openTabs.push({
+            type: "private",
+            id: targetUserId,
+            name: targetUserName,
+            chatId: chatId
         });
         
-        addSystemMessage(`Вы сменили имя на ${currentUsername}`);
-    });
+        renderTabs();
+        switchToTab(openTabs.length - 1);
+    }
+    
+    function renderTabs() {
+        tabsContainer.innerHTML = openTabs.map((tab, index) => `
+            <div class="tab ${index === activeTabIndex ? 'active' : ''}" data-index="${index}">
+                ${tab.type === "global" ? "# " : "💬 "}${escapeHtml(tab.name)}
+                ${tab.type !== "global" ? `<span class="close-tab" data-index="${index}">✕</span>` : ''}
+            </div>
+        `).join('');
+        
+        // Обработчики для вкладок
+        document.querySelectorAll('.tab').forEach(tab => {
+            const index = parseInt(tab.dataset.index);
+            tab.addEventListener('click', (e) => {
+                if (e.target.classList.contains('close-tab')) {
+                    e.stopPropagation();
+                    closeTab(index);
+                } else {
+                    switchToTab(index);
+                }
+            });
+        });
+    }
+    
+    function switchToTab(index) {
+        activeTabIndex = index;
+        currentChat = openTabs[index];
+        renderTabs();
+        loadMessages();
+    }
+    
+    function closeTab(index) {
+        if (openTabs[index].type === "global") return;
+        openTabs.splice(index, 1);
+        if (activeTabIndex >= openTabs.length) {
+            activeTabIndex = openTabs.length - 1;
+        }
+        if (activeTabIndex < 0) activeTabIndex = 0;
+        currentChat = openTabs[activeTabIndex];
+        renderTabs();
+        loadMessages();
+    }
+    
+    // Загрузка сообщений для текущего чата
+    let currentListener = null;
+    
+    function loadMessages() {
+        // Очищаем старый слушатель
+        if (currentListener && currentListener.off) {
+            currentListener.off();
+        }
+        
+        messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
+        
+        let messagesQuery;
+        
+        if (currentChat.type === "global") {
+            messagesQuery = query(messagesRef, limitToLast(100));
+            currentListener = onChildAdded(messagesQuery, (snapshot) => {
+                const data = snapshot.val();
+                const isOwn = (data.userId === userId);
+                addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
+                clearLoadingMessage();
+            });
+        } else {
+            const chatId = [userId, currentChat.id].sort().join('_');
+            const privateChatRef = ref(db, `private_messages/${chatId}`);
+            messagesQuery = query(privateChatRef, limitToLast(100));
+            currentListener = onChildAdded(messagesQuery, (snapshot) => {
+                const data = snapshot.val();
+                const isOwn = (data.fromId === userId);
+                addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
+                clearLoadingMessage();
+            });
+        }
+        
+        function clearLoadingMessage() {
+            const loadingMsg = messagesArea.querySelector(".system-message");
+            if (loadingMsg && loadingMsg.innerText.includes("Загрузка")) {
+                loadingMsg.remove();
+            }
+        }
+    }
     
     function addMessageToDOM(username, text, timestamp, isOwn = false) {
         const messageDiv = document.createElement("div");
@@ -446,15 +694,24 @@
         
         const username = currentUsername.trim() || "Аноним";
         
-        push(messagesRef, {
-            username: username,
-            text: text,
-            timestamp: Date.now(),
-            userId: userId
-        }).catch(error => {
-            console.error("Ошибка:", error);
-            addSystemMessage("Ошибка отправки сообщения");
-        });
+        if (currentChat.type === "global") {
+            push(messagesRef, {
+                username: username,
+                text: text,
+                timestamp: Date.now(),
+                userId: userId
+            }).catch(error => console.error("Ошибка:", error));
+        } else {
+            const chatId = [userId, currentChat.id].sort().join('_');
+            const privateChatRef = ref(db, `private_messages/${chatId}`);
+            push(privateChatRef, {
+                username: username,
+                text: text,
+                timestamp: Date.now(),
+                fromId: userId,
+                toId: currentChat.id
+            }).catch(error => console.error("Ошибка:", error));
+        }
         
         messageInput.value = "";
         messageInput.focus();
@@ -483,53 +740,18 @@
         }, 2000);
     }
     
-    const recentQuery = query(messagesRef, limitToLast(100));
-    
-    let firstLoad = true;
-    onChildAdded(recentQuery, (snapshot) => {
-        const data = snapshot.val();
-        const isOwn = (data.userId === userId);
-        addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
-        
-        if (firstLoad) {
-            const loadingMsg = messagesArea.querySelector(".system-message");
-            if (loadingMsg && loadingMsg.innerText.includes("Подключение")) {
-                loadingMsg.remove();
-            }
-            firstLoad = false;
-        }
-    });
-    
-    const userStatusRef = ref(db, `users/${userId}`);
-    set(userStatusRef, { username: currentUsername, lastSeen: Date.now() });
-    
-    onValue(ref(db, "users"), (snapshot) => {
-        const users = snapshot.val();
-        if (users) {
-            const now = Date.now();
-            let onlineCount = 0;
-            for (let id in users) {
-                if (now - (users[id].lastSeen || 0) < 60000) {
-                    onlineCount++;
-                } else {
-                    remove(ref(db, `users/${id}`));
-                }
-            }
-            onlineCountSpan.textContent = onlineCount;
-        } else {
-            onlineCountSpan.textContent = "0";
-        }
-    });
-    
-    setInterval(() => {
-        set(userStatusRef, { username: currentUsername, lastSeen: Date.now() });
-    }, 30000);
+    // Обновление статуса
+    updateUserStatus();
+    setInterval(updateUserStatus, 30000);
     
     window.addEventListener("beforeunload", () => {
-        remove(userStatusRef);
+        remove(ref(db, `users/${userId}`));
     });
     
-    addSystemMessage(`Добро пожаловать, ${currentUsername}`);
+    addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
+    
+    // Загружаем общий чат по умолчанию
+    loadMessages();
 </script>
 </body>
 </html>
