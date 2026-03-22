@@ -333,8 +333,8 @@
     // Message caches
     let globalMessages = [];
     let globalMessageIds = new Set();
-    let privateMessages = new Map();
-    let privateMessageIds = new Map();
+    let privateMessages = new Map(); // key: userId, value: array
+    let privateMessageIds = new Map(); // key: userId, value: Set
     
     // Unread counts
     let unreadCounts = new Map();
@@ -356,6 +356,7 @@
                 const tabs = JSON.parse(saved);
                 openTabs = [{ type: "global", id: null, name: "Общий чат" }];
                 tabs.forEach(t => openTabs.push({ type: "private", id: t.id, name: t.name }));
+                console.log("📂 Загружены вкладки:", openTabs);
             }
         } catch(e) {}
     }
@@ -410,17 +411,6 @@
         `;
         messagesArea.appendChild(div);
         scrollToBottom();
-    }
-    
-    function updateUnreadBadge(chatId, increment = true) {
-        if (increment) {
-            const current = unreadCounts.get(chatId) || 0;
-            unreadCounts.set(chatId, current + 1);
-        } else {
-            unreadCounts.delete(chatId);
-        }
-        saveUnread();
-        renderTabs();
     }
     
     function renderTabs() {
@@ -665,35 +655,48 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
-                // Проверяем, открыт ли уже этот чат и активен ли он
+                // Проверяем, открыт ли уже этот чат
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
+                console.log(`📊 Статус: isTabOpen=${isTabOpen}, isActive=${isActive}`);
+                
                 if (!isTabOpen) {
-                    // Создаем новую вкладку
-                    console.log(`➕ Создаем новую вкладку для ${senderName}`);
+                    // СОЗДАЕМ НОВУЮ ВКЛАДКУ
+                    console.log(`➕ СОЗДАЕМ НОВУЮ ВКЛАДКУ для ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: senderName });
                     saveTabs();
                     
                     // Увеличиваем счетчик непрочитанных
-                    updateUnreadBadge(senderId, true);
+                    const current = unreadCounts.get(senderId) || 0;
+                    unreadCounts.set(senderId, current + 1);
+                    saveUnread();
+                    
+                    // ОБНОВЛЯЕМ ОТОБРАЖЕНИЕ ВКЛАДОК
+                    renderTabs();
                     
                     // Показываем уведомление
                     showToast(`💬 Новое сообщение от ${senderName}`);
                     
-                    // Если это первое сообщение и чат не активен, показываем системное сообщение в общем чате
+                    // Добавляем системное сообщение в общий чат
                     if (currentChat.type === "global") {
                         const sysMsg = document.createElement("div");
                         sysMsg.className = "system-message";
-                        sysMsg.innerHTML = `✨ Новое сообщение от ${escapeHtml(senderName)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
+                        sysMsg.style.background = "#2a5a2a";
+                        sysMsg.style.color = "#ffaa33";
+                        sysMsg.style.border = "1px solid #ffaa33";
+                        sysMsg.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
                         messagesArea.appendChild(sysMsg);
                         scrollToBottom();
-                        setTimeout(() => sysMsg.remove(), 5000);
+                        setTimeout(() => sysMsg.remove(), 8000);
                     }
                 } else if (!isActive) {
                     // Вкладка есть, но не активна - увеличиваем счетчик
                     console.log(`🔔 Увеличиваем счетчик для ${senderName}`);
-                    updateUnreadBadge(senderId, true);
+                    const current = unreadCounts.get(senderId) || 0;
+                    unreadCounts.set(senderId, current + 1);
+                    saveUnread();
+                    renderTabs();
                     showToast(`💬 Новое сообщение от ${senderName}`);
                 }
                 
@@ -706,9 +709,6 @@
                     });
                     scrollToBottom();
                 }
-                
-                // Принудительно обновляем вкладки
-                renderTabs();
             }
         });
         
@@ -841,6 +841,7 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
+    console.log("💡 Откройте другую вкладку и отправьте сообщение этому пользователю, чтобы проверить уведомления");
 </script>
 </body>
 </html>
