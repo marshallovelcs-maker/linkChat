@@ -293,8 +293,8 @@
     let privateMessages = new Map();
     let privateMessageIds = new Map();
     
-    // Unread counts
-    let unreadCounts = new Map();
+    // Время последнего прочтения для каждого чата
+    let lastReadTime = new Map(); // key: userId or "global"
     
     // Listeners
     let globalListener = null;
@@ -316,20 +316,38 @@
         } catch(e) {}
     }
     
-    function loadUnread() {
+    function loadLastRead() {
         try {
-            const saved = localStorage.getItem("fembo_unread");
+            const saved = localStorage.getItem("fembo_lastread");
             if (saved) {
                 const obj = JSON.parse(saved);
-                unreadCounts.clear();
-                Object.entries(obj).forEach(([k, v]) => unreadCounts.set(k, v));
+                lastReadTime.clear();
+                Object.entries(obj).forEach(([k, v]) => lastReadTime.set(k, v));
             }
         } catch(e) {}
     }
-    function saveUnread() {
+    function saveLastRead() {
         const obj = {};
-        unreadCounts.forEach((v, k) => obj[k] = v);
-        localStorage.setItem("fembo_unread", JSON.stringify(obj));
+        lastReadTime.forEach((v, k) => obj[k] = v);
+        localStorage.setItem("fembo_lastread", JSON.stringify(obj));
+    }
+    
+    function updateLastRead(chatId) {
+        const now = Date.now();
+        lastReadTime.set(chatId, now);
+        saveLastRead();
+    }
+    
+    function getUnreadCount(chatId) {
+        const lastRead = lastReadTime.get(chatId) || 0;
+        const messages = privateMessages.get(chatId) || [];
+        let count = 0;
+        for (const msg of messages) {
+            if (msg.fromId !== userId && msg.timestamp > lastRead) {
+                count++;
+            }
+        }
+        return count;
     }
     
     function showToast(msg) {
@@ -361,7 +379,7 @@
     
     function renderTabs() {
         tabsContainer.innerHTML = openTabs.map((tab, idx) => {
-            const unread = tab.type === "private" ? (unreadCounts.get(tab.id) || 0) : 0;
+            const unread = tab.type === "private" ? getUnreadCount(tab.id) : 0;
             const isBlinking = unread > 0 && idx !== activeTabIndex;
             return `
                 <div class="tab ${idx === activeTabIndex ? 'active' : ''} ${isBlinking ? 'blinking' : ''}" data-index="${idx}">
@@ -397,9 +415,11 @@
         activeTabIndex = index;
         currentChat = openTabs[index];
         
+        // Обновляем время последнего прочтения для этого чата
         if (currentChat.type === "private") {
-            unreadCounts.delete(currentChat.id);
-            saveUnread();
+            updateLastRead(currentChat.id);
+        } else {
+            updateLastRead("global");
         }
         
         renderTabs();
@@ -434,8 +454,6 @@
             off(l.ref, 'child_added', l.callback);
             privateListeners.delete(tab.id);
         }
-        unreadCounts.delete(tab.id);
-        saveUnread();
         openTabs.splice(index, 1);
         saveTabs();
         
@@ -500,7 +518,7 @@
         });
     }
     
-    // Личный чат (история)
+    // Личный чат (история и уведомления)
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
         
@@ -532,27 +550,28 @@
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
             
-            // ВАЖНО: Здесь проверяем, нужно ли показать уведомление
-            // Если сообщение для меня и не от меня, и чат не активен
-            if (data.toId === userId && data.fromId !== userId) {
-                const isActive = (currentChat.type === "private" && currentChat.id === targetId);
-                if (!isActive) {
-                    // Увеличиваем счетчик непрочитанных
-                    const current = unreadCounts.get(targetId) || 0;
-                    unreadCounts.set(targetId, current + 1);
-                    saveUnread();
+            // Проверяем, нужно ли показать уведомление
+            const isForMe = data.toId === userId;
+            const isNotFromMe = data.fromId !== userId;
+            const lastRead = lastReadTime.get(targetId) || 0;
+            const isNew = data.timestamp > lastRead;
+            const isActive = (currentChat.type === "private" && currentChat.id === targetId);
+            
+            if (isForMe && isNotFromMe && isNew) {
+                // Увеличиваем счетчик непрочитанных (он будет считаться через getUnreadCount)
+                renderTabs();
+                showToast(`💬 Новое сообщение от ${data.username}`);
+                
+                // Если вкладки нет - добавляем
+                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === targetId);
+                if (!isTabOpen) {
+                    openTabs.push({ type: "private", id: targetId, name: data.username });
+                    saveTabs();
                     renderTabs();
-                    showToast(`💬 Новое сообщение от ${data.username}`);
-                    
-                    // Если вкладки нет - добавляем
-                    const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === targetId);
-                    if (!isTabOpen) {
-                        openTabs.push({ type: "private", id: targetId, name: data.username });
-                        saveTabs();
-                        renderTabs();
-                    }
-                    
-                    // Системное сообщение в общий чат
+                }
+                
+                // Системное сообщение в общий чат
+                if (currentChat.type === "global") {
                     const sysDiv = document.createElement("div");
                     sysDiv.className = "system";
                     sysDiv.style.background = "#2a5a2a";
@@ -566,11 +585,15 @@
                 }
             }
             
-            if (currentChat.type === "private" && currentChat.id === targetId) {
+            // Если чат активен, обновляем UI
+            if (isActive) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
                     addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
                 });
+                // Обновляем время последнего прочтения для активного чата
+                updateLastRead(targetId);
+                renderTabs();
             }
         };
         
@@ -605,6 +628,8 @@
                 fromId: userId,
                 toId: currentChat.id
             }).catch(err => console.error(err));
+            // Обновляем время прочтения для своих сообщений
+            updateLastRead(currentChat.id);
         }
         messageInput.value = "";
         messageInput.focus();
@@ -671,7 +696,7 @@
     });
     
     loadTabs();
-    loadUnread();
+    loadLastRead();
     startGlobalListener();
     updateStatus();
     setInterval(updateStatus, 30000);
