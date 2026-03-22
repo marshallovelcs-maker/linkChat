@@ -356,9 +356,6 @@
     let privateListeners = new Map();
     let globalPrivateListener = null;
     
-    // Время запуска для фильтрации старых сообщений
-    const startTime = Date.now();
-    
     // Save/Load
     function saveTabs() {
         const tabs = openTabs.filter(t => t.type === "private").map(t => ({ id: t.id, name: t.name }));
@@ -622,11 +619,11 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // Глобальный слушатель для новых личных сообщений
+    // Глобальный слушатель для новых личных сообщений - СОЗДАЕТ ВКЛАДКИ
     function startGlobalPrivateListener() {
         if (globalPrivateListener) return;
         
-        console.log("🔔 Запуск глобального слушателя, время старта:", new Date(startTime).toLocaleTimeString());
+        console.log("🔔 Глобальный слушатель запущен");
         
         const privateMessagesRef = ref(db, "private_messages");
         
@@ -634,20 +631,16 @@
             const data = snapshot.val();
             if (!data || !data.text) return;
             
-            // Пропускаем старые сообщения (те, что были до запуска)
-            if (data.timestamp && data.timestamp < startTime - 2000) {
-                console.log("⏭️ Пропускаем старое сообщение от", data.username, "время:", new Date(data.timestamp).toLocaleTimeString());
-                return;
-            }
-            
             // Проверяем, это сообщение для текущего пользователя и не от себя
             if (data.toId === userId && data.fromId !== userId) {
                 const senderId = data.fromId;
                 const senderName = data.username;
+                const msgTime = data.timestamp;
+                const msgId = snapshot.key;
                 
-                console.log(`✅ НОВОЕ СООБЩЕНИЕ от ${senderName} в ${new Date(data.timestamp).toLocaleTimeString()}`);
+                console.log(`📨 НОВОЕ СООБЩЕНИЕ от ${senderName}`);
                 
-                // Добавляем в кэш если нужно
+                // Добавляем сообщение в кэш
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -655,7 +648,6 @@
                 
                 const msgs = privateMessages.get(senderId);
                 const msgIdsSet = privateMessageIds.get(senderId);
-                const msgId = snapshot.key;
                 
                 if (!msgIdsSet.has(msgId)) {
                     msgIdsSet.add(msgId);
@@ -671,18 +663,25 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
+                // Проверяем, открыта ли вкладка
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 const lastRead = lastReadTime.get(senderId) || 0;
-                const isNew = data.timestamp > lastRead;
+                const isNew = msgTime > lastRead;
                 
+                console.log(`📊 isTabOpen=${isTabOpen}, isActive=${isActive}, isNew=${isNew}`);
+                
+                // ВСЕГДА создаем вкладку, если её нет
                 if (!isTabOpen) {
                     console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: senderName });
                     saveTabs();
                     renderTabs();
+                    
+                    // Показываем уведомление
                     showToast(`💬 Новое сообщение от ${senderName}`);
                     
+                    // Системное сообщение в общий чат
                     if (currentChat.type === "global") {
                         const sysDiv = document.createElement("div");
                         sysDiv.className = "system";
@@ -696,6 +695,7 @@
                         setTimeout(() => sysDiv.remove(), 8000);
                     }
                 } else if (!isActive && isNew) {
+                    // Вкладка есть, обновляем счетчик
                     console.log(`🔔 Обновляю счетчик для ${senderName}`);
                     renderTabs();
                     showToast(`💬 Новое сообщение от ${senderName}`);
@@ -823,8 +823,7 @@
     console.log("🚀 Чат запущен!");
     console.log("👤 Ваш ID:", userId);
     console.log("📝 Ваше имя:", username);
-    console.log("⏰ Время запуска:", new Date(startTime).toLocaleTimeString());
-    console.log("💡 Теперь только новые сообщения будут создавать вкладки");
+    console.log("💡 При получении нового сообщения будет создаваться новая вкладка");
 </script>
 </body>
 </html>
