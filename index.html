@@ -67,13 +67,13 @@
             border-color: #4a4a4a;
         }
 
-        .online-list {
+        .users-list {
             flex: 1;
             overflow-y: auto;
             padding: 0.5rem;
         }
 
-        .online-user {
+        .user-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -85,7 +85,7 @@
             transition: all 0.2s;
         }
 
-        .online-user:hover {
+        .user-item:hover {
             background: #1a1a1a;
             border-color: #4a4a4a;
         }
@@ -105,16 +105,30 @@
             font-size: 0.85rem;
         }
 
-        .online-dot {
+        .user-status {
             width: 8px;
             height: 8px;
-            background: #2ecc71;
             border-radius: 50%;
         }
 
-        .private-badge {
-            font-size: 0.7rem;
-            color: #888888;
+        .status-online {
+            background: #2ecc71;
+        }
+
+        .status-offline {
+            background: #7f8c8d;
+        }
+
+        .users-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .users-list::-webkit-scrollbar-track {
+            background: #000000;
+        }
+
+        .users-list::-webkit-scrollbar-thumb {
+            background: #2a2a2a;
         }
 
         /* Основная область */
@@ -152,6 +166,21 @@
             color: #ffffff;
         }
 
+        .copy-link-btn {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            padding: 0.5rem 1.2rem;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .copy-link-btn:hover {
+            background: #3a3a3a;
+        }
+
         /* Вкладки */
         .tabs {
             display: flex;
@@ -180,11 +209,6 @@
             border-color: #4a4a4a;
             border-bottom-color: #1a1a1a;
             margin-bottom: -1px;
-        }
-
-        .tab:hover:not(.active) {
-            background: #1a1a1a;
-            color: #e0e0e0;
         }
 
         .close-tab {
@@ -316,7 +340,6 @@
 
         button:hover {
             background: #2a2a2a;
-            border-color: #5a5a5a;
         }
 
         .messages-area::-webkit-scrollbar {
@@ -328,18 +351,6 @@
         }
 
         .messages-area::-webkit-scrollbar-thumb {
-            background: #2a2a2a;
-        }
-
-        .online-list::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .online-list::-webkit-scrollbar-track {
-            background: #000000;
-        }
-
-        .online-list::-webkit-scrollbar-thumb {
             background: #2a2a2a;
         }
 
@@ -370,13 +381,13 @@
 <body>
 
 <div class="chat-container">
-    <!-- Боковая панель с онлайн пользователями -->
+    <!-- Боковая панель с пользователями -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <h3>◼ Онлайн</h3>
+            <h3>◼ Пользователи</h3>
             <input type="text" id="searchUsers" class="search-box" placeholder="Поиск по нику...">
         </div>
-        <div class="online-list" id="onlineList">
+        <div class="users-list" id="usersList">
             <div class="system-message" style="margin: 1rem;">Загрузка...</div>
         </div>
     </div>
@@ -422,7 +433,7 @@
 
 <script type="module">
     import { initializeApp } from "firebase/app";
-    import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, remove, get } from "firebase/database";
+    import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, remove, off } from "firebase/database";
 
     const firebaseConfig = {
         apiKey: "AIzaSyACbUMNMGOQLg-iCDVuceIcld7UJTayYqU",
@@ -438,14 +449,13 @@
     const db = getDatabase(app);
     
     const messagesRef = ref(db, "messages");
-    const privateMessagesRef = ref(db, "private_messages");
     
     // DOM элементы
     const messagesArea = document.getElementById("messagesArea");
     const messageInput = document.getElementById("messageInput");
     const sendBtn = document.getElementById("sendButton");
     const copyLinkBtn = document.getElementById("copyLinkButton");
-    const onlineListDiv = document.getElementById("onlineList");
+    const usersListDiv = document.getElementById("usersList");
     const searchInput = document.getElementById("searchUsers");
     const tabsContainer = document.getElementById("tabsContainer");
     
@@ -459,10 +469,11 @@
     
     // Состояние чата
     let currentChat = { type: "global", id: null, name: "Общий чат" };
-    let privateChats = new Map(); // { userId: { name, unread, lastMessage } }
     let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
-    let allUsers = new Map();
+    let allUsers = new Map(); // id -> { name, online, lastSeen }
+    let currentMessageListener = null;
+    let isSending = false; // Флаг для предотвращения дублирования
     
     // Модальное окно для ввода имени
     function showNamePrompt() {
@@ -475,7 +486,7 @@
     }
     
     setTimeout(() => {
-        if (currentUsername === "Гость_" + currentUsername.split("_")[1]) {
+        if (currentUsername.startsWith("Гость_")) {
             showNamePrompt();
         }
     }, 500);
@@ -485,52 +496,56 @@
         set(userStatusRef, {
             username: currentUsername,
             lastSeen: Date.now(),
+            online: true,
             userId: userId
         });
     }
     
-    // Отслеживание онлайн пользователей
+    // Отслеживание пользователей (включая оффлайн)
     onValue(ref(db, "users"), (snapshot) => {
         const users = snapshot.val();
         allUsers.clear();
         if (users) {
             const now = Date.now();
             for (let id in users) {
-                if (now - (users[id].lastSeen || 0) < 60000) {
-                    if (id !== userId) {
-                        allUsers.set(id, users[id].username);
-                    }
-                } else {
-                    remove(ref(db, `users/${id}`));
-                }
+                const user = users[id];
+                const isOnline = (now - (user.lastSeen || 0) < 120000); // 2 минуты = онлайн
+                allUsers.set(id, {
+                    name: user.username,
+                    online: isOnline,
+                    lastSeen: user.lastSeen
+                });
             }
         }
-        renderOnlineList();
+        renderUsersList();
     });
     
-    function renderOnlineList() {
+    function renderUsersList() {
         const searchTerm = searchInput.value.toLowerCase();
-        const onlineUsers = Array.from(allUsers.entries()).filter(([id, name]) => 
-            name.toLowerCase().includes(searchTerm)
-        );
+        const users = Array.from(allUsers.entries())
+            .filter(([id, data]) => id !== userId && data.name.toLowerCase().includes(searchTerm))
+            .sort((a, b) => {
+                // Сначала онлайн, потом по имени
+                if (a[1].online !== b[1].online) return b[1].online ? 1 : -1;
+                return a[1].name.localeCompare(b[1].name);
+            });
         
-        if (onlineUsers.length === 0) {
-            onlineListDiv.innerHTML = '<div class="system-message" style="margin: 1rem;">◼ Нет пользователей онлайн</div>';
+        if (users.length === 0) {
+            usersListDiv.innerHTML = '<div class="system-message" style="margin: 1rem;">◼ Нет других пользователей</div>';
             return;
         }
         
-        onlineListDiv.innerHTML = onlineUsers.map(([id, name]) => `
-            <div class="online-user" data-user-id="${id}" data-user-name="${name}">
+        usersListDiv.innerHTML = users.map(([id, data]) => `
+            <div class="user-item" data-user-id="${id}" data-user-name="${data.name}">
                 <div class="user-info">
                     <span class="user-avatar">🦊</span>
-                    <span class="user-name">${escapeHtml(name)}</span>
+                    <span class="user-name">${escapeHtml(data.name)}</span>
                 </div>
-                <div class="online-dot"></div>
+                <div class="user-status ${data.online ? 'status-online' : 'status-offline'}"></div>
             </div>
         `).join('');
         
-        // Добавляем обработчики кликов
-        document.querySelectorAll('.online-user').forEach(el => {
+        document.querySelectorAll('.user-item').forEach(el => {
             el.addEventListener('click', () => {
                 const targetId = el.dataset.userId;
                 const targetName = el.dataset.userName;
@@ -539,27 +554,19 @@
         });
     }
     
-    searchInput.addEventListener("input", renderOnlineList);
+    searchInput.addEventListener("input", renderUsersList);
     
-    // Открытие личного чата
     function openPrivateChat(targetUserId, targetUserName) {
-        const chatId = [userId, targetUserId].sort().join('_');
-        
-        // Проверяем, открыт ли уже этот чат
-        const existingTab = openTabs.find(tab => tab.type === "private" && tab.id === targetUserId);
-        if (existingTab) {
-            // Переключаемся на существующую вкладку
-            const index = openTabs.findIndex(t => t === existingTab);
-            switchToTab(index);
+        const existingTabIndex = openTabs.findIndex(tab => tab.type === "private" && tab.id === targetUserId);
+        if (existingTabIndex !== -1) {
+            switchToTab(existingTabIndex);
             return;
         }
         
-        // Добавляем новую вкладку
         openTabs.push({
             type: "private",
             id: targetUserId,
-            name: targetUserName,
-            chatId: chatId
+            name: targetUserName
         });
         
         renderTabs();
@@ -574,7 +581,6 @@
             </div>
         `).join('');
         
-        // Обработчики для вкладок
         document.querySelectorAll('.tab').forEach(tab => {
             const index = parseInt(tab.dataset.index);
             tab.addEventListener('click', (e) => {
@@ -607,13 +613,10 @@
         loadMessages();
     }
     
-    // Загрузка сообщений для текущего чата
-    let currentListener = null;
-    
     function loadMessages() {
-        // Очищаем старый слушатель
-        if (currentListener && currentListener.off) {
-            currentListener.off();
+        // Отключаем старый слушатель
+        if (currentMessageListener) {
+            off(currentMessageListener.ref, 'child_added', currentMessageListener.callback);
         }
         
         messagesArea.innerHTML = '<div class="system-message">◼ Загрузка сообщений...</div>';
@@ -622,22 +625,30 @@
         
         if (currentChat.type === "global") {
             messagesQuery = query(messagesRef, limitToLast(100));
-            currentListener = onChildAdded(messagesQuery, (snapshot) => {
+            const callback = (snapshot) => {
                 const data = snapshot.val();
-                const isOwn = (data.userId === userId);
-                addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
-                clearLoadingMessage();
-            });
+                if (data && data.username && data.text) {
+                    const isOwn = (data.userId === userId);
+                    addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
+                    clearLoadingMessage();
+                }
+            };
+            currentMessageListener = { ref: messagesQuery, callback };
+            onChildAdded(messagesQuery, callback);
         } else {
             const chatId = [userId, currentChat.id].sort().join('_');
             const privateChatRef = ref(db, `private_messages/${chatId}`);
             messagesQuery = query(privateChatRef, limitToLast(100));
-            currentListener = onChildAdded(messagesQuery, (snapshot) => {
+            const callback = (snapshot) => {
                 const data = snapshot.val();
-                const isOwn = (data.fromId === userId);
-                addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
-                clearLoadingMessage();
-            });
+                if (data && data.username && data.text) {
+                    const isOwn = (data.fromId === userId);
+                    addMessageToDOM(data.username, data.text, data.timestamp, isOwn);
+                    clearLoadingMessage();
+                }
+            };
+            currentMessageListener = { ref: messagesQuery, callback };
+            onChildAdded(messagesQuery, callback);
         }
         
         function clearLoadingMessage() {
@@ -689,8 +700,12 @@
     }
     
     function sendMessage() {
+        if (isSending) return;
+        
         const text = messageInput.value.trim();
         if (!text) return;
+        
+        isSending = true;
         
         const username = currentUsername.trim() || "Аноним";
         
@@ -700,7 +715,9 @@
                 text: text,
                 timestamp: Date.now(),
                 userId: userId
-            }).catch(error => console.error("Ошибка:", error));
+            }).finally(() => {
+                isSending = false;
+            });
         } else {
             const chatId = [userId, currentChat.id].sort().join('_');
             const privateChatRef = ref(db, `private_messages/${chatId}`);
@@ -710,7 +727,9 @@
                 timestamp: Date.now(),
                 fromId: userId,
                 toId: currentChat.id
-            }).catch(error => console.error("Ошибка:", error));
+            }).finally(() => {
+                isSending = false;
+            });
         }
         
         messageInput.value = "";
@@ -740,12 +759,22 @@
         }, 2000);
     }
     
-    // Обновление статуса
+    // Обновление статуса (онлайн)
     updateUserStatus();
-    setInterval(updateUserStatus, 30000);
     
+    // Обновляем статус каждые 30 секунд
+    const statusInterval = setInterval(updateUserStatus, 30000);
+    
+    // При закрытии вкладки — помечаем как оффлайн (но не удаляем)
     window.addEventListener("beforeunload", () => {
-        remove(ref(db, `users/${userId}`));
+        clearInterval(statusInterval);
+        const userStatusRef = ref(db, `users/${userId}`);
+        set(userStatusRef, {
+            username: currentUsername,
+            lastSeen: Date.now(),
+            online: false,
+            userId: userId
+        });
     });
     
     addSystemMessage(`Добро пожаловать, ${currentUsername}. Нажмите на пользователя справа чтобы начать личный чат.`);
