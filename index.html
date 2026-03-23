@@ -638,9 +638,9 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ - МГНОВЕННО СОЗДАЕТ ВКЛАДКИ ==========
+    // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ - СОЗДАЕТ ВКЛАДКИ ==========
     function setupGlobalPrivateListener() {
-        console.log("🔔 УСТАНОВКА ГЛОБАЛЬНОГО СЛУШАТЕЛЯ...");
+        console.log("🔔 ЗАПУСК СЛУШАТЕЛЯ...");
         
         const privateMessagesRef = ref(db, "private_messages");
         
@@ -652,7 +652,7 @@
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 [СЛУШАТЕЛЬ] Получено: toId=${data.toId}, fromId=${data.fromId}`);
+            console.log(`📨 Получено: для ${data.toId}, от ${data.fromId}`);
             
             // Проверяем, что сообщение для текущего пользователя
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
@@ -660,9 +660,9 @@
                 const senderName = data.username;
                 const senderUniqueId = data.uniqueId || "";
                 
-                console.log(`✅ НОВОЕ СООБЩЕНИЕ ДЛЯ ВАС от ${senderName} (${senderUniqueId})`);
+                console.log(`✅ НОВОЕ СООБЩЕНИЕ от ${senderName}`);
                 
-                // Добавляем сообщение в кэш
+                // Добавляем в кэш
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -684,50 +684,47 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
-                // Проверяем, открыта ли вкладка
+                // ПРОВЕРЯЕМ, ОТКРЫТА ЛИ ВКЛАДКА
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
                 console.log(`📊 Вкладка открыта: ${isTabOpen}, Активна: ${isActive}`);
                 
-                // ЕСЛИ ВКЛАДКА ЗАКРЫТА - СОЗДАЕМ (мгновенно!)
+                // ЕСЛИ ВКЛАДКИ НЕТ - СОЗДАЕМ!
                 if (!isTabOpen) {
-                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
+                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ: ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: `${senderName} ${senderUniqueId}` });
                     saveTabs();
+                    renderTabs(); // МГНОВЕННОЕ ОБНОВЛЕНИЕ
                     
-                    // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ DOM
-                    renderTabs();
-                    
-                    // Показываем системное сообщение в общем чате
+                    // Системное сообщение
                     const sysDiv = document.createElement("div");
                     sysDiv.className = "system";
                     sysDiv.style.background = "#2a5a2a";
                     sysDiv.style.color = "#ffaa33";
                     sysDiv.style.border = "2px solid #ffaa33";
                     sysDiv.style.padding = "0.5rem";
-                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
+                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}!`;
                     messagesArea.appendChild(sysDiv);
                     messagesArea.scrollTop = messagesArea.scrollHeight;
                     setTimeout(() => sysDiv.remove(), 8000);
                 } else {
-                    // Вкладка уже есть - обновляем счетчик
+                    // Вкладка есть - обновляем счетчик
                     renderTabs();
                 }
                 
-                // Показываем уведомление
+                // Уведомление
                 showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Если чат активен - показываем сообщение с подсветкой
+                // Если чат активен - показываем сообщение
                 if (isActive) {
-                    console.log(`✨ ПОКАЗЫВАЮ СООБЩЕНИЕ в активном чате`);
                     addMessageToDOM(data.username, data.uniqueId || "", data.text, data.timestamp, false, true);
                     updateLastRead(senderId);
                 }
             }
         });
         
-        console.log("✅ ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ УСТАНОВЛЕН");
+        console.log("✅ СЛУШАТЕЛЬ ЗАПУЩЕН");
     }
     
     // Отправка сообщения
@@ -738,8 +735,6 @@
         if (!text) return;
         if (Date.now() - lastSend < 500) { showToast("Подождите"); return; }
         lastSend = Date.now();
-        
-        console.log(`📤 Отправка сообщения в ${currentChat.type} чат`);
         
         if (currentChat.type === "global") {
             push(ref(db, "global_messages"), {
@@ -916,7 +911,6 @@
         console.log("👤 Ваш ID:", currentUser.uid);
         console.log("📝 Ваше имя:", myUsername);
         console.log("🔢 Ваш уникальный ID:", myUniqueId);
-        console.log("💡 Теперь отправьте сообщение с другого аккаунта - вкладка появится МГНОВЕННО!");
     }
     
     onAuthStateChanged(auth, (user) => {
