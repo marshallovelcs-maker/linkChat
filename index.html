@@ -100,11 +100,6 @@
             border-radius: 12px;
             min-width: 22px;
             text-align: center;
-            animation: pulseBadge 1s infinite;
-        }
-        @keyframes pulseBadge {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
         }
         .user-status { width: 8px; height: 8px; border-radius: 50%; }
         .status-online { background: #2ecc71; }
@@ -185,15 +180,6 @@
             width: fit-content;
         }
         .message.own { align-self: flex-end; }
-        .message.unread {
-            animation: highlight 0.5s ease-out;
-            border-left: 3px solid #ffaa33;
-            padding-left: 8px;
-        }
-        @keyframes highlight {
-            0% { background: rgba(255, 170, 51, 0.3); }
-            100% { background: transparent; }
-        }
         .bubble {
             background: #1e1e1e;
             padding: 0.6rem 1rem;
@@ -268,7 +254,6 @@
             z-index: 1000;
             font-weight: bold;
             font-size: 0.9rem;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
         .auth-overlay {
             position: fixed;
@@ -404,7 +389,6 @@
     let globalListener = null;
     let privateListeners = new Map();
     let processedMsgIds = new Set();
-    let lastMessageTime = Date.now();
     
     // Генерация ID
     function generateUniqueId() {
@@ -446,9 +430,8 @@
         return uniqueId;
     }
     
-    // ЯРКОЕ УВЕДОМЛЕНИЕ - гарантированно видно!
     function showNotification(msg) {
-        // Всплывающее уведомление
+        // Создаем и показываем уведомление
         let toast = document.querySelector(".toast");
         if (toast) toast.remove();
         const d = document.createElement("div");
@@ -456,33 +439,18 @@
         d.innerHTML = `📩 ${escapeHtml(msg)}`;
         document.body.appendChild(d);
         
-        // Мигание заголовка вкладки
+        // Мигание заголовка
         const originalTitle = document.title;
         let count = 0;
         const interval = setInterval(() => {
             document.title = count % 2 === 0 ? "🔔 НОВОЕ СООБЩЕНИЕ! 🔔" : originalTitle;
             count++;
-            if (count > 10) {
+            if (count > 8) {
                 clearInterval(interval);
                 document.title = originalTitle;
             }
         }, 500);
         
-        // Звук
-        try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.frequency.value = 800;
-            gainNode.gain.value = 0.2;
-            oscillator.start();
-            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
-            oscillator.stop(audioCtx.currentTime + 0.5);
-        } catch(e) { console.log("Звук не поддерживается"); }
-        
-        // Автоматическое исчезновение через 4 секунды
         setTimeout(() => {
             if (d.parentNode) d.remove();
         }, 4000);
@@ -493,9 +461,9 @@
         return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
     }
     
-    function addMessageToDOM(name, uniqueId, text, ts, isOwn, isUnread = false) {
+    function addMessageToDOM(name, uniqueId, text, ts, isOwn) {
         const div = document.createElement("div");
-        div.className = `message ${isOwn ? 'own' : ''} ${isUnread ? 'unread' : ''}`;
+        div.className = `message ${isOwn ? 'own' : ''}`;
         const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         div.innerHTML = `
             <div class="bubble">${escapeHtml(text)}</div>
@@ -507,7 +475,6 @@
         `;
         messagesArea.appendChild(div);
         messagesArea.scrollTop = messagesArea.scrollHeight;
-        if (isUnread) setTimeout(() => div.classList.remove('unread'), 2000);
     }
     
     function renderUsersList() {
@@ -573,7 +540,7 @@
         } else {
             messagesArea.innerHTML = '';
             msgs.forEach(msg => {
-                addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid, false);
+                addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
             });
         }
         startPrivateListener(targetId);
@@ -587,7 +554,7 @@
         } else {
             messagesArea.innerHTML = '';
             globalMessages.forEach(msg => {
-                addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid, false);
+                addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid);
             });
         }
     }
@@ -606,7 +573,7 @@
             if (currentChatId === null) {
                 messagesArea.innerHTML = '';
                 globalMessages.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.userId === currentUser?.uid, false);
+                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.userId === currentUser?.uid);
                 });
             }
         });
@@ -632,7 +599,7 @@
             if (currentChatId === targetId) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid, false);
+                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
                 });
             }
         };
@@ -640,32 +607,31 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // Глобальный слушатель для уведомлений
+    // ГЛАВНЫЙ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ - СРАБАТЫВАЕТ НА ЛЮБОЕ СООБЩЕНИЕ
     function setupNotificationListener() {
-        console.log("🔔 СЛУШАТЕЛЬ ЗАПУЩЕН");
+        console.log("🔔 СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ ЗАПУЩЕН");
         
         const privateMessagesRef = ref(db, "private_messages");
         
         onChildAdded(privateMessagesRef, (snapshot) => {
             const data = snapshot.val();
             const msgId = snapshot.key;
-            const msgTime = data?.timestamp || Date.now();
             
             if (!data || !data.text) return;
-            if (msgTime < lastMessageTime - 1000) return;
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 Сообщение: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
+            console.log(`📨 ПОЛУЧЕНО СООБЩЕНИЕ: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
             
+            // ЕСЛИ СООБЩЕНИЕ ДЛЯ МЕНЯ - ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ!
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
                 const senderId = data.fromId;
                 const senderName = data.username;
                 const senderUniqueId = data.uniqueId || "";
                 
-                console.log(`✅ НОВОЕ СООБЩЕНИЕ ОТ: ${senderName}`);
+                console.log(`✅ НОВОЕ СООБЩЕНИЕ ОТ: ${senderName} - ПОКАЗЫВАЮ УВЕДОМЛЕНИЕ!`);
                 
-                // Добавляем в кэш
+                // ДОБАВЛЯЕМ СООБЩЕНИЕ В КЭШ
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -687,22 +653,22 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
-                // Увеличиваем счетчик
+                // УВЕЛИЧИВАЕМ СЧЕТЧИК
                 const current = unreadCounts.get(senderId) || 0;
                 unreadCounts.set(senderId, current + 1);
                 console.log(`📊 Счетчик для ${senderName}: ${current + 1}`);
                 
-                // ОБНОВЛЯЕМ СПИСОК ПОЛЬЗОВАТЕЛЕЙ - ДОБАВЛЯЕМ ПОДСВЕТКУ!
+                // ОБНОВЛЯЕМ СПИСОК ПОЛЬЗОВАТЕЛЕЙ (ПОДСВЕТКА)
                 renderUsersList();
                 
-                // ПОКАЗЫВАЕМ ЯРКОЕ УВЕДОМЛЕНИЕ
+                // ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ!
                 showNotification(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Если чат уже открыт - показываем сообщение
+                // ЕСЛИ ЧАТ ОТКРЫТ - ПОКАЗЫВАЕМ СООБЩЕНИЕ
                 if (currentChatId === senderId) {
                     messagesArea.innerHTML = '';
                     msgs.forEach(msg => {
-                        addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid, true);
+                        addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
                     });
                     unreadCounts.delete(senderId);
                     renderUsersList();
@@ -844,8 +810,6 @@
         userIdDisplaySpan.textContent = myUniqueId;
         chatContainer.style.display = "flex";
         
-        lastMessageTime = Date.now();
-        
         startGlobalListener();
         setupNotificationListener();
         updateStatus();
@@ -854,6 +818,8 @@
         openGlobalChat();
         
         console.log("🚀 ЧАТ ЗАПУЩЕН!");
+        console.log("👤 Ваш ID:", currentUser.uid);
+        console.log("📝 Ваше имя:", myUsername);
     }
     
     onValue(ref(db, "users"), (snapshot) => {
