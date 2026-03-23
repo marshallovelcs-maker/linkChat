@@ -157,9 +157,7 @@
             min-width: 18px;
             text-align: center;
             font-weight: bold;
-            animation: pulse 1s infinite;
         }
-        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
         .messages-area {
             flex: 1;
             overflow-y: auto;
@@ -174,7 +172,6 @@
             flex-direction: column;
             max-width: 75%;
             width: fit-content;
-            transition: all 0.2s;
         }
         .message.own { align-self: flex-end; }
         .message.unread {
@@ -183,8 +180,8 @@
             padding-left: 8px;
         }
         @keyframes highlight {
-            0% { background: rgba(255, 170, 51, 0.3); border-left-color: #ffaa33; }
-            100% { background: transparent; border-left-color: #ffaa33; }
+            0% { background: rgba(255, 170, 51, 0.3); }
+            100% { background: transparent; }
         }
         .bubble {
             background: #1e1e1e;
@@ -394,8 +391,7 @@
     let lastReadTime = new Map();
     let globalListener = null;
     let privateListeners = new Map();
-    let globalPrivateListener = null;
-    let messageTimestamps = new Map();
+    let processedMessageIds = new Set();
     
     // Генерация ID
     function generateUniqueId() {
@@ -470,11 +466,8 @@
         messagesArea.appendChild(div);
         messagesArea.scrollTop = messagesArea.scrollHeight;
         
-        // Убираем подсветку через 2 секунды
         if (isUnread) {
-            setTimeout(() => {
-                div.classList.remove('unread');
-            }, 2000);
+            setTimeout(() => div.classList.remove('unread'), 2000);
         }
     }
     
@@ -594,7 +587,6 @@
                 messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
             } else {
                 msgs.forEach(msg => {
-                    const isUnread = msg.fromId !== currentUser?.uid && msg.timestamp > (lastReadTime.get(currentChat.id) || 0);
                     addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid, false);
                 });
             }
@@ -657,7 +649,7 @@
         });
     }
     
-    // Личный чат
+    // Личный чат (история)
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
         const chatId = [currentUser?.uid, targetId].sort().join('_');
@@ -685,24 +677,19 @@
             
             if (isForMe && isNotFromMe) {
                 if (isActive) {
-                    // Чат активен - показываем сообщение с подсветкой
                     addMessageToDOM(data.username, data.uniqueId || "", data.text, data.timestamp, false, true);
-                    // Обновляем время прочтения
                     updateLastRead(targetId);
                     renderTabs();
                 } else {
-                    // Чат не активен - обновляем счетчик и вкладку
                     renderTabs();
                     showToast(`💬 Новое сообщение от ${data.username} ${data.uniqueId || ""}`);
                     
-                    // Если вкладки нет - создаем
                     const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === targetId);
                     if (!isTabOpen) {
                         openTabs.push({ type: "private", id: targetId, name: `${data.username} ${data.uniqueId || ""}` });
                         saveTabs();
                         renderTabs();
                         
-                        // Системное сообщение в общий чат
                         if (currentChat.type === "global") {
                             const sysDiv = document.createElement("div");
                             sysDiv.className = "system";
@@ -719,7 +706,6 @@
             }
             
             if (isActive) {
-                // Обновляем отображение сообщений в активном чате
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
                     const isUnread = msg.fromId !== currentUser?.uid && msg.timestamp > lastRead;
@@ -730,6 +716,90 @@
         
         onChildAdded(chatQuery, callback);
         privateListeners.set(targetId, { ref: chatQuery, callback });
+    }
+    
+    // Глобальный слушатель для ВСЕХ личных сообщений (работает в реальном времени)
+    function startGlobalPrivateListener() {
+        const privateMessagesRef = ref(db, "private_messages");
+        
+        onChildAdded(privateMessagesRef, (snapshot) => {
+            const data = snapshot.val();
+            const msgId = snapshot.key;
+            
+            if (!data || !data.text) return;
+            if (processedMessageIds.has(msgId)) return;
+            processedMessageIds.add(msgId);
+            
+            // Проверяем, сообщение для текущего пользователя
+            if (data.toId === currentUser?.uid && data.fromId !== currentUser?.uid) {
+                const senderId = data.fromId;
+                const senderName = data.username;
+                const senderUniqueId = data.uniqueId || "";
+                const msgTime = data.timestamp;
+                const lastRead = lastReadTime.get(senderId) || 0;
+                const isNew = msgTime > lastRead;
+                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
+                
+                console.log(`📨 Новое сообщение от ${senderName} (${senderUniqueId}), активен: ${isActive}`);
+                
+                // Добавляем сообщение в кэш
+                if (!privateMessages.has(senderId)) {
+                    privateMessages.set(senderId, []);
+                    privateMessageIds.set(senderId, new Set());
+                }
+                const msgs = privateMessages.get(senderId);
+                const msgIdsSet = privateMessageIds.get(senderId);
+                if (!msgIdsSet.has(msgId)) {
+                    msgIdsSet.add(msgId);
+                    msgs.push({
+                        id: msgId,
+                        username: data.username,
+                        uniqueId: data.uniqueId || "",
+                        text: data.text,
+                        timestamp: data.timestamp,
+                        fromId: data.fromId,
+                        toId: data.toId
+                    });
+                    msgs.sort((a, b) => a.timestamp - b.timestamp);
+                    privateMessages.set(senderId, msgs);
+                }
+                
+                // Проверяем, открыта ли вкладка
+                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
+                
+                // Если вкладка закрыта - создаем новую
+                if (!isTabOpen) {
+                    console.log(`➕ Создаю новую вкладку для ${senderName}`);
+                    openTabs.push({ type: "private", id: senderId, name: `${senderName} ${senderUniqueId}` });
+                    saveTabs();
+                    renderTabs();
+                    
+                    // Показываем системное сообщение в общем чате
+                    if (currentChat.type === "global") {
+                        const sysDiv = document.createElement("div");
+                        sysDiv.className = "system";
+                        sysDiv.style.background = "#2a5a2a";
+                        sysDiv.style.color = "#ffaa33";
+                        sysDiv.style.border = "1px solid #ffaa33";
+                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}!`;
+                        messagesArea.appendChild(sysDiv);
+                        messagesArea.scrollTop = messagesArea.scrollHeight;
+                        setTimeout(() => sysDiv.remove(), 8000);
+                    }
+                }
+                
+                // Если чат не активен - обновляем счетчик
+                if (!isActive) {
+                    renderTabs();
+                    showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
+                } else {
+                    // Если чат активен - показываем сообщение с подсветкой
+                    addMessageToDOM(data.username, data.uniqueId || "", data.text, data.timestamp, false, true);
+                    updateLastRead(senderId);
+                    renderTabs();
+                }
+            }
+        });
     }
     
     // Отправка сообщения
@@ -905,7 +975,7 @@
         loadTabs();
         loadLastRead();
         startGlobalListener();
-        startPrivateMessagesListener();
+        startGlobalPrivateListener(); // ГЛАВНЫЙ СЛУШАТЕЛЬ ДЛЯ НОВЫХ СООБЩЕНИЙ
         updateStatus();
         setInterval(updateStatus, 30000);
         renderTabs();
@@ -913,43 +983,6 @@
         setTimeout(() => {
             openTabs.forEach(tab => { if (tab.type === "private") startPrivateListener(tab.id); });
         }, 1000);
-    }
-    
-    // Отдельный слушатель для уведомлений о новых сообщениях
-    function startPrivateMessagesListener() {
-        const privateMessagesRef = ref(db, "private_messages");
-        onChildAdded(privateMessagesRef, (snapshot) => {
-            const data = snapshot.val();
-            if (!data || !data.text) return;
-            if (data.toId === currentUser?.uid && data.fromId !== currentUser?.uid) {
-                const senderId = data.fromId;
-                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
-                const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
-                
-                if (!isTabOpen) {
-                    openTabs.push({ type: "private", id: senderId, name: `${data.username} ${data.uniqueId || ""}` });
-                    saveTabs();
-                    renderTabs();
-                    
-                    if (currentChat.type === "global") {
-                        const sysDiv = document.createElement("div");
-                        sysDiv.className = "system";
-                        sysDiv.style.background = "#2a5a2a";
-                        sysDiv.style.color = "#ffaa33";
-                        sysDiv.style.border = "1px solid #ffaa33";
-                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(data.username)} ${escapeHtml(data.uniqueId || "")}!`;
-                        messagesArea.appendChild(sysDiv);
-                        messagesArea.scrollTop = messagesArea.scrollHeight;
-                        setTimeout(() => sysDiv.remove(), 8000);
-                    }
-                }
-                
-                if (!isActive) {
-                    renderTabs();
-                    showToast(`💬 Новое сообщение от ${data.username} ${data.uniqueId || ""}`);
-                }
-            }
-        });
     }
     
     // Auth state
@@ -991,6 +1024,8 @@
             set(ref(db, `users/${currentUser.uid}`), { email: currentUser.email, username: myUsername, uniqueId: myUniqueId, lastSeen: Date.now(), online: false });
         }
     });
+    
+    console.log("🚀 Чат запущен! Глобальный слушатель активен.");
 </script>
 </body>
 </html>
