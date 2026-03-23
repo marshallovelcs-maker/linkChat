@@ -427,12 +427,12 @@
     let privateListeners = new Map();
     let globalPrivateListener = null;
     
-    // Генерация уникального ID в формате #000000A
+    // Генерация уникального ID в формате 000000A (без #)
     function generateUniqueId() {
         const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         const randomLetter = letters[Math.floor(Math.random() * letters.length)];
         const randomNumbers = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-        return `#${randomNumbers}${randomLetter}`;
+        return `${randomNumbers}${randomLetter}`;
     }
     
     // Проверка уникальности ID в Firebase
@@ -1085,6 +1085,7 @@
     });
     
     console.log("🚀 Чат с регистрацией запущен!");
+    console.log("📝 Формат ID: 6 цифр + буква (например: 123456A)");
 </script>
 </body>
 </html>
