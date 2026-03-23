@@ -379,7 +379,7 @@
     let privateListeners = new Map();
     let globalPrivateListener = null;
     
-    // Генерация ID
+    // Генерация ID (6 цифр + буква)
     function generateUniqueId() {
         const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         const randomLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -387,25 +387,59 @@
         return `${randomNumbers}${randomLetter}`;
     }
     
-    // Получение уникального ID
+    // Сохранение данных пользователя в Firebase
+    async function saveUserToDatabase(userId, email, username, uniqueId) {
+        console.log("💾 Сохраняю пользователя:", { userId, email, username, uniqueId });
+        try {
+            await set(ref(db, `users/${userId}`), {
+                email: email,
+                username: username,
+                uniqueId: uniqueId,
+                lastSeen: Date.now(),
+                online: true
+            });
+            console.log("✅ Пользователь сохранен!");
+        } catch (error) {
+            console.error("❌ Ошибка сохранения:", error);
+        }
+    }
+    
+    // Получение данных пользователя
+    async function loadUserData(userId) {
+        console.log("📖 Загружаю данные пользователя:", userId);
+        try {
+            const snapshot = await get(ref(db, `users/${userId}`));
+            const data = snapshot.val();
+            console.log("📦 Данные из Firebase:", data);
+            return data;
+        } catch (error) {
+            console.error("❌ Ошибка загрузки:", error);
+            return null;
+        }
+    }
+    
+    // Проверка уникальности ID
     async function getUniqueUserId() {
         let uniqueId;
         let isUnique = false;
         let attempts = 0;
         while (!isUnique && attempts < 50) {
             uniqueId = generateUniqueId();
+            console.log(`🔍 Проверяю ID: ${uniqueId} (попытка ${attempts + 1})`);
             const idRef = ref(db, `unique_ids/${uniqueId}`);
             const snapshot = await get(idRef);
             if (!snapshot.exists()) {
                 isUnique = true;
                 await set(idRef, { taken: true, userId: auth.currentUser?.uid });
+                console.log(`✅ ID ${uniqueId} уникален!`);
+            } else {
+                console.log(`⚠️ ID ${uniqueId} уже занят`);
             }
             attempts++;
         }
         return uniqueId;
     }
     
-    // Показать уведомление
     function showToast(msg) {
         let t = document.querySelector(".toast");
         if (t) t.remove();
@@ -698,6 +732,7 @@
     function updateStatus() {
         if (!currentUser) return;
         set(ref(db, `users/${currentUser.uid}`), {
+            email: currentUser.email,
             username: myUsername,
             uniqueId: myUniqueId,
             lastSeen: Date.now(),
@@ -786,21 +821,25 @@
             if (!isLogin && password.length < 6) { authError.textContent = "Пароль должен быть не менее 6 символов"; return; }
             try {
                 if (isLogin) {
+                    console.log("🔐 Вход с email:", email);
                     await signInWithEmailAndPassword(auth, email, password);
+                    console.log("✅ Вход выполнен");
                 } else {
+                    console.log("📝 Регистрация с email:", email);
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const newUser = userCredential.user;
+                    console.log("✅ Пользователь создан:", newUser.uid);
+                    
                     const uniqueId = await getUniqueUserId();
                     const defaultName = email.split('@')[0];
-                    await set(ref(db, `users/${userCredential.user.uid}`), {
-                        email: email,
-                        username: defaultName,
-                        uniqueId: uniqueId,
-                        lastSeen: Date.now(),
-                        online: true
-                    });
+                    
+                    console.log("💾 Сохраняю данные пользователя...");
+                    await saveUserToDatabase(newUser.uid, email, defaultName, uniqueId);
+                    console.log("✅ Регистрация завершена!");
                 }
                 modal.remove();
             } catch (error) {
+                console.error("❌ Ошибка:", error);
                 let errorMessage = "Ошибка: ";
                 switch (error.code) {
                     case "auth/email-already-in-use": errorMessage += "Email уже используется"; break;
@@ -817,26 +856,24 @@
         passwordInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
     }
     
-    // Инициализация чата
+    // Инициализация чата после входа
     async function initChat(user) {
+        console.log("🚀 Инициализация чата для пользователя:", user.uid);
         currentUser = user;
-        const snapshot = await get(ref(db, `users/${user.uid}`));
-        const userDataFromDb = snapshot.val();
         
-        if (userDataFromDb) {
-            myUsername = userDataFromDb.username;
-            myUniqueId = userDataFromDb.uniqueId;
+        const userData = await loadUserData(user.uid);
+        
+        if (userData && userData.username && userData.uniqueId) {
+            myUsername = userData.username;
+            myUniqueId = userData.uniqueId;
+            console.log("📦 Данные загружены:", { myUsername, myUniqueId });
         } else {
+            console.log("⚠️ Данные не найдены, создаю новые...");
             myUsername = user.email.split('@')[0];
             myUniqueId = generateUniqueId();
-            await set(ref(db, `users/${user.uid}`), {
-                email: user.email,
-                username: myUsername,
-                uniqueId: myUniqueId,
-                lastSeen: Date.now(),
-                online: true
-            });
+            await saveUserToDatabase(user.uid, user.email, myUsername, myUniqueId);
             await set(ref(db, `unique_ids/${myUniqueId}`), { taken: true, userId: user.uid });
+            console.log("✅ Новые данные созданы:", { myUsername, myUniqueId });
         }
         
         userNicknameSpan.textContent = myUsername;
@@ -854,6 +891,8 @@
         setTimeout(() => {
             openTabs.forEach(tab => { if (tab.type === "private") startPrivateListener(tab.id); });
         }, 1000);
+        
+        console.log("✅ Чат готов!");
     }
     
     // Auth state
@@ -861,6 +900,7 @@
         if (user) {
             initChat(user);
         } else {
+            console.log("🔓 Пользователь не авторизован");
             chatContainer.style.display = "none";
             showAuthModal();
         }
@@ -892,11 +932,12 @@
     
     window.addEventListener("beforeunload", () => {
         if (currentUser) {
-            set(ref(db, `users/${currentUser.uid}`), { username: myUsername, uniqueId: myUniqueId, lastSeen: Date.now(), online: false });
+            set(ref(db, `users/${currentUser.uid}`), { email: currentUser.email, username: myUsername, uniqueId: myUniqueId, lastSeen: Date.now(), online: false });
         }
     });
     
-    console.log("🚀 Чат запущен!");
+    console.log("🚀 Чат с регистрацией запущен!");
+    console.log("📝 Откройте консоль (F12) для отладки");
 </script>
 </body>
 </html>
