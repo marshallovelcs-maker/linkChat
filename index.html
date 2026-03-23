@@ -638,7 +638,7 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ - СОЗДАЕТ ВКЛАДКИ ==========
+    // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ - МГНОВЕННО СОЗДАЕТ ВКЛАДКИ ==========
     function setupGlobalPrivateListener() {
         console.log("🔔 УСТАНОВКА ГЛОБАЛЬНОГО СЛУШАТЕЛЯ...");
         
@@ -652,7 +652,7 @@
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 [СЛУШАТЕЛЬ] Получено: toId=${data.toId}, fromId=${data.fromId}, текущий пользователь=${currentUser?.uid}`);
+            console.log(`📨 [СЛУШАТЕЛЬ] Получено: toId=${data.toId}, fromId=${data.fromId}`);
             
             // Проверяем, что сообщение для текущего пользователя
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
@@ -690,27 +690,28 @@
                 
                 console.log(`📊 Вкладка открыта: ${isTabOpen}, Активна: ${isActive}`);
                 
-                // ЕСЛИ ВКЛАДКА ЗАКРЫТА - СОЗДАЕМ
+                // ЕСЛИ ВКЛАДКА ЗАКРЫТА - СОЗДАЕМ (мгновенно!)
                 if (!isTabOpen) {
                     console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: `${senderName} ${senderUniqueId}` });
                     saveTabs();
-                    renderTabs(); // Принудительно обновляем отображение вкладок
                     
-                    // Системное сообщение в общий чат
-                    if (currentChat.type === "global") {
-                        const sysDiv = document.createElement("div");
-                        sysDiv.className = "system";
-                        sysDiv.style.background = "#2a5a2a";
-                        sysDiv.style.color = "#ffaa33";
-                        sysDiv.style.border = "1px solid #ffaa33";
-                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
-                        messagesArea.appendChild(sysDiv);
-                        messagesArea.scrollTop = messagesArea.scrollHeight;
-                        setTimeout(() => sysDiv.remove(), 8000);
-                    }
+                    // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ DOM
+                    renderTabs();
+                    
+                    // Показываем системное сообщение в общем чате
+                    const sysDiv = document.createElement("div");
+                    sysDiv.className = "system";
+                    sysDiv.style.background = "#2a5a2a";
+                    sysDiv.style.color = "#ffaa33";
+                    sysDiv.style.border = "2px solid #ffaa33";
+                    sysDiv.style.padding = "0.5rem";
+                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
+                    messagesArea.appendChild(sysDiv);
+                    messagesArea.scrollTop = messagesArea.scrollHeight;
+                    setTimeout(() => sysDiv.remove(), 8000);
                 } else {
-                    // Вкладка уже есть - просто обновляем счетчик
+                    // Вкладка уже есть - обновляем счетчик
                     renderTabs();
                 }
                 
@@ -902,7 +903,7 @@
         loadTabs();
         loadLastRead();
         startGlobalListener();
-        setupGlobalPrivateListener(); // ГЛАВНЫЙ СЛУШАТЕЛЬ
+        setupGlobalPrivateListener();
         updateStatus();
         setInterval(updateStatus, 30000);
         renderTabs();
@@ -915,7 +916,7 @@
         console.log("👤 Ваш ID:", currentUser.uid);
         console.log("📝 Ваше имя:", myUsername);
         console.log("🔢 Ваш уникальный ID:", myUniqueId);
-        console.log("💡 Теперь отправьте сообщение с другого аккаунта на этот ID");
+        console.log("💡 Теперь отправьте сообщение с другого аккаунта - вкладка появится МГНОВЕННО!");
     }
     
     onAuthStateChanged(auth, (user) => {
