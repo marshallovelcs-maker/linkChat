@@ -392,6 +392,7 @@
     let globalListener = null;
     let privateListeners = new Map();
     let processedMsgIds = new Set();
+    let lastMessageTime = Date.now(); // Время последнего полученного сообщения
     
     // Генерация ID
     function generateUniqueId() {
@@ -640,19 +641,27 @@
     
     // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ - СОЗДАЕТ ВКЛАДКИ ==========
     function setupGlobalPrivateListener() {
-        console.log("🔔 СЛУШАТЕЛЬ ЗАПУЩЕН!");
+        console.log("🔔 СЛУШАТЕЛЬ ЗАПУЩЕН! Время старта:", new Date(lastMessageTime).toLocaleTimeString());
         
         const privateMessagesRef = ref(db, "private_messages");
         
         onChildAdded(privateMessagesRef, (snapshot) => {
             const data = snapshot.val();
             const msgId = snapshot.key;
+            const msgTime = data?.timestamp || Date.now();
             
             if (!data || !data.text) return;
+            
+            // Пропускаем старые сообщения (те, что были до запуска)
+            if (msgTime < lastMessageTime - 1000) {
+                console.log(`⏭️ Пропускаем старое сообщение от ${data.username}, время: ${new Date(msgTime).toLocaleTimeString()}`);
+                return;
+            }
+            
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 СООБЩЕНИЕ: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
+            console.log(`📨 СООБЩЕНИЕ: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}, время=${new Date(msgTime).toLocaleTimeString()}`);
             
             // ПРОВЕРЯЕМ, ЧТО СООБЩЕНИЕ ДЛЯ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
@@ -686,8 +695,9 @@
                 
                 // ПРОВЕРЯЕМ, ОТКРЫТА ЛИ ВКЛАДКА
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
+                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
-                console.log(`📊 Вкладка открыта: ${isTabOpen}`);
+                console.log(`📊 Вкладка открыта: ${isTabOpen}, Активна: ${isActive}`);
                 
                 // ЕСЛИ ВКЛАДКА ЗАКРЫТА - СОЗДАЕМ!
                 if (!isTabOpen) {
@@ -696,10 +706,7 @@
                     saveTabs();
                     renderTabs(); // МГНОВЕННОЕ ОБНОВЛЕНИЕ
                     
-                    // ПОКАЗЫВАЕМ ALERT ДЛЯ ПРОВЕРКИ
-                    alert(`🔔 Новое сообщение от ${senderName}! Вкладка добавлена.`);
-                    
-                    // Системное сообщение
+                    // Системное сообщение в общий чат
                     const sysDiv = document.createElement("div");
                     sysDiv.className = "system";
                     sysDiv.style.background = "#2a5a2a";
@@ -711,7 +718,7 @@
                     messagesArea.scrollTop = messagesArea.scrollHeight;
                     setTimeout(() => sysDiv.remove(), 8000);
                 } else {
-                    // Вкладка есть - просто обновляем счетчик
+                    // Вкладка есть - обновляем счетчик
                     renderTabs();
                 }
                 
@@ -719,7 +726,6 @@
                 showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
                 // ЕСЛИ ЧАТ АКТИВЕН - ПОКАЗЫВАЕМ СООБЩЕНИЕ
-                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 if (isActive) {
                     addMessageToDOM(data.username, data.uniqueId || "", data.text, data.timestamp, false, true);
                     updateLastRead(senderId);
@@ -896,10 +902,13 @@
         userIdDisplaySpan.textContent = myUniqueId;
         chatContainer.style.display = "flex";
         
+        // Обновляем время старта
+        lastMessageTime = Date.now();
+        
         loadTabs();
         loadLastRead();
         startGlobalListener();
-        setupGlobalPrivateListener(); // ЗАПУСКАЕМ СЛУШАТЕЛЬ
+        setupGlobalPrivateListener();
         updateStatus();
         setInterval(updateStatus, 30000);
         renderTabs();
@@ -909,6 +918,7 @@
         }, 1000);
         
         console.log("🚀 ЧАТ ЗАПУЩЕН!");
+        console.log("⏰ Время старта:", new Date(lastMessageTime).toLocaleTimeString());
     }
     
     onAuthStateChanged(auth, (user) => {
