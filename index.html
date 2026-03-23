@@ -391,6 +391,7 @@
     let lastReadTime = new Map();
     let globalListener = null;
     let privateListeners = new Map();
+    let processedMsgIds = new Set();
     
     // Генерация ID
     function generateUniqueId() {
@@ -637,18 +638,13 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ ==========
-    let notificationListener = null;
-    let processedMsgIds = new Set();
-    
-    function startNotificationListener() {
-        if (notificationListener) return;
-        
-        console.log("🔔 ЗАПУСК СЛУШАТЕЛЯ УВЕДОМЛЕНИЙ");
+    // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ ==========
+    function setupGlobalPrivateListener() {
+        console.log("🔔 УСТАНОВКА ГЛОБАЛЬНОГО СЛУШАТЕЛЯ...");
         
         const privateMessagesRef = ref(db, "private_messages");
         
-        notificationListener = onChildAdded(privateMessagesRef, (snapshot) => {
+        onChildAdded(privateMessagesRef, (snapshot) => {
             const data = snapshot.val();
             const msgId = snapshot.key;
             
@@ -656,20 +652,17 @@
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 ПОЛУЧЕНО СООБЩЕНИЕ: toId=${data.toId}, fromId=${data.fromId}, userId=${currentUser?.uid}`);
+            console.log(`📨 [СЛУШАТЕЛЬ] Получено: toId=${data.toId}, fromId=${data.fromId}, текущий пользователь=${currentUser?.uid}`);
             
-            // Проверяем, что сообщение для текущего пользователя и не от него
-            if (data.toId === currentUser?.uid && data.fromId !== currentUser?.uid) {
+            // Проверяем, что сообщение для текущего пользователя
+            if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
                 const senderId = data.fromId;
                 const senderName = data.username;
                 const senderUniqueId = data.uniqueId || "";
-                const msgTime = data.timestamp;
-                const lastRead = lastReadTime.get(senderId) || 0;
-                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
-                console.log(`✅ НОВОЕ СООБЩЕНИЕ ДЛЯ ВАС от ${senderName} (${senderUniqueId}), активен: ${isActive}`);
+                console.log(`✅ НОВОЕ СООБЩЕНИЕ ДЛЯ ВАС от ${senderName} (${senderUniqueId})`);
                 
-                // Добавляем в кэш
+                // Добавляем сообщение в кэш
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -693,6 +686,9 @@
                 
                 // Проверяем, открыта ли вкладка
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
+                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
+                
+                console.log(`📊 Вкладка открыта: ${isTabOpen}, Активна: ${isActive}`);
                 
                 // ЕСЛИ ВКЛАДКА ЗАКРЫТА - СОЗДАЕМ
                 if (!isTabOpen) {
@@ -702,21 +698,23 @@
                     renderTabs();
                     
                     // Системное сообщение в общий чат
-                    const sysDiv = document.createElement("div");
-                    sysDiv.className = "system";
-                    sysDiv.style.background = "#2a5a2a";
-                    sysDiv.style.color = "#ffaa33";
-                    sysDiv.style.border = "1px solid #ffaa33";
-                    sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку чтобы прочитать.`;
-                    messagesArea.appendChild(sysDiv);
-                    messagesArea.scrollTop = messagesArea.scrollHeight;
-                    setTimeout(() => sysDiv.remove(), 8000);
+                    if (currentChat.type === "global") {
+                        const sysDiv = document.createElement("div");
+                        sysDiv.className = "system";
+                        sysDiv.style.background = "#2a5a2a";
+                        sysDiv.style.color = "#ffaa33";
+                        sysDiv.style.border = "1px solid #ffaa33";
+                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку чтобы прочитать.`;
+                        messagesArea.appendChild(sysDiv);
+                        messagesArea.scrollTop = messagesArea.scrollHeight;
+                        setTimeout(() => sysDiv.remove(), 8000);
+                    }
                 }
                 
                 // Показываем уведомление
                 showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Обновляем отображение вкладок (для счетчика)
+                // Обновляем отображение вкладок
                 renderTabs();
                 
                 // Если чат активен - показываем сообщение с подсветкой
@@ -728,7 +726,7 @@
             }
         });
         
-        console.log("✅ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ ЗАПУЩЕН");
+        console.log("✅ ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ УСТАНОВЛЕН");
     }
     
     // Отправка сообщения
@@ -739,6 +737,8 @@
         if (!text) return;
         if (Date.now() - lastSend < 500) { showToast("Подождите"); return; }
         lastSend = Date.now();
+        
+        console.log(`📤 Отправка сообщения в ${currentChat.type} чат`);
         
         if (currentChat.type === "global") {
             push(ref(db, "global_messages"), {
@@ -902,7 +902,7 @@
         loadTabs();
         loadLastRead();
         startGlobalListener();
-        startNotificationListener(); // ГЛАВНЫЙ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ
+        setupGlobalPrivateListener(); // ГЛАВНЫЙ СЛУШАТЕЛЬ
         updateStatus();
         setInterval(updateStatus, 30000);
         renderTabs();
@@ -915,6 +915,7 @@
         console.log("👤 Ваш ID:", currentUser.uid);
         console.log("📝 Ваше имя:", myUsername);
         console.log("🔢 Ваш уникальный ID:", myUniqueId);
+        console.log("💡 Теперь отправьте сообщение с другого аккаунта на этот ID");
     }
     
     onAuthStateChanged(auth, (user) => {
