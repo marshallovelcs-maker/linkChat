@@ -89,16 +89,8 @@
             border: 1px solid #3a3a3a;
         }
         .user-info span:first-child { color: #888; font-size: 0.7rem; }
-        .user-info .nickname {
-            color: #ffaa66;
-            font-weight: 600;
-            font-size: 0.8rem;
-        }
-        .user-info .user-id-display {
-            color: #666;
-            font-size: 0.7rem;
-            font-family: monospace;
-        }
+        .user-info .nickname { color: #ffaa66; font-weight: 600; font-size: 0.8rem; }
+        .user-info .user-id-display { color: #666; font-size: 0.7rem; font-family: monospace; }
         .edit-name-btn {
             background: #2a2a2a;
             border: none;
@@ -108,7 +100,6 @@
             padding: 0.2rem 0.5rem;
             border-radius: 12px;
         }
-        .edit-name-btn:hover { background: #3a3a3a; color: #fff; }
         .logout-btn {
             background: #2a2a2a;
             border: 1px solid #5a3a3a;
@@ -118,7 +109,6 @@
             font-size: 0.7rem;
             border-radius: 6px;
         }
-        .logout-btn:hover { background: #3a2a2a; color: #ffaaaa; }
         .copy-btn {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
@@ -148,21 +138,9 @@
             white-space: nowrap;
             position: relative;
         }
-        .tab.active {
-            background: #1a1a1a;
-            color: #fff;
-            border-color: #4a4a4a;
-            margin-bottom: -1px;
-        }
-        .tab.blinking {
-            animation: blink 0.6s ease-in-out infinite;
-            background: #2a5a2a;
-            color: #fff;
-        }
-        @keyframes blink {
-            0%, 100% { background: #2a5a2a; }
-            50% { background: #ffaa33; color: #000; }
-        }
+        .tab.active { background: #1a1a1a; color: #fff; border-color: #4a4a4a; margin-bottom: -1px; }
+        .tab.blinking { animation: blink 0.6s ease-in-out infinite; background: #2a5a2a; color: #fff; }
+        @keyframes blink { 0%,100% { background: #2a5a2a; } 50% { background: #ffaa33; color: #000; } }
         .close-tab { margin-left: 6px; color: #888; cursor: pointer; font-size: 0.7rem; }
         .close-tab:hover { color: #ff8888; }
         .unread-badge {
@@ -264,8 +242,6 @@
             border-radius: 8px;
             z-index: 1000;
         }
-        
-        /* Auth Modal */
         .auth-overlay {
             position: fixed;
             top: 0;
@@ -285,11 +261,7 @@
             width: 90%;
             max-width: 400px;
         }
-        .auth-modal h2 {
-            color: #fff;
-            margin-bottom: 1.5rem;
-            font-size: 1.2rem;
-        }
+        .auth-modal h2 { color: #fff; margin-bottom: 1.5rem; font-size: 1.2rem; }
         .auth-input {
             width: 100%;
             background: #111;
@@ -300,7 +272,6 @@
             margin-bottom: 1rem;
             outline: none;
         }
-        .auth-input:focus { border-color: #4a4a4a; }
         .auth-btn {
             width: 100%;
             background: #1a1a1a;
@@ -311,20 +282,9 @@
             cursor: pointer;
             margin-bottom: 1rem;
         }
-        .auth-btn:hover { background: #2a2a2a; }
-        .auth-switch {
-            text-align: center;
-            color: #888;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
+        .auth-switch { text-align: center; color: #888; font-size: 0.85rem; cursor: pointer; }
         .auth-switch span { color: #ffaa66; text-decoration: underline; }
-        .auth-error {
-            color: #ff8888;
-            font-size: 0.8rem;
-            text-align: center;
-            margin-top: 0.5rem;
-        }
+        .auth-error { color: #ff8888; font-size: 0.8rem; text-align: center; margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -338,10 +298,7 @@
     </div>
     <div class="main-area">
         <div class="chat-header">
-            <div class="brand">
-                <div class="logo">🦊</div>
-                <h1>Fembo</h1>
-            </div>
+            <div class="brand"><div class="logo">🦊</div><h1>Fembo</h1></div>
             <div class="user-info">
                 <span>👤</span>
                 <span class="nickname" id="userNickname"></span>
@@ -405,29 +362,24 @@
     const editNameBtn = document.getElementById("editNameBtn");
     const logoutBtn = document.getElementById("logoutBtn");
     
-    // State
+    // Глобальные переменные
     let currentUser = null;
-    let userData = null;
+    let myUsername = "";
+    let myUniqueId = "";
     let currentChat = { type: "global", id: null, name: "Общий чат" };
     let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
     let allUsers = new Map();
-    
-    // Message caches
     let globalMessages = [];
     let globalMessageIds = new Set();
     let privateMessages = new Map();
     let privateMessageIds = new Map();
-    
-    // Время последнего прочтения
     let lastReadTime = new Map();
-    
-    // Listeners
     let globalListener = null;
     let privateListeners = new Map();
     let globalPrivateListener = null;
     
-    // Генерация уникального ID в формате 000000A (без #)
+    // Генерация ID
     function generateUniqueId() {
         const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         const randomLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -435,12 +387,11 @@
         return `${randomNumbers}${randomLetter}`;
     }
     
-    // Проверка уникальности ID в Firebase
+    // Получение уникального ID
     async function getUniqueUserId() {
         let uniqueId;
         let isUnique = false;
         let attempts = 0;
-        
         while (!isUnique && attempts < 50) {
             uniqueId = generateUniqueId();
             const idRef = ref(db, `unique_ids/${uniqueId}`);
@@ -454,136 +405,7 @@
         return uniqueId;
     }
     
-    // Сохранение данных пользователя
-    async function saveUserData(userId, email, username, uniqueId) {
-        await set(ref(db, `users/${userId}`), {
-            email: email,
-            username: username,
-            uniqueId: uniqueId,
-            lastSeen: Date.now(),
-            online: true
-        });
-        console.log("✅ Данные пользователя сохранены:", { username, uniqueId });
-    }
-    
-    // Получение данных пользователя
-    async function getUserData(userId) {
-        const snapshot = await get(ref(db, `users/${userId}`));
-        return snapshot.val();
-    }
-    
-    // Обновление ника
-    async function updateUsername(newName) {
-        if (!currentUser) return;
-        await set(ref(db, `users/${currentUser.uid}/username`), newName);
-        if (userData) userData.username = newName;
-        userNicknameSpan.textContent = newName;
-        updateStatus();
-        showToast(`Имя изменено на ${newName}`);
-    }
-    
-    // Auth Modal
-    function showAuthModal() {
-        const modal = document.createElement("div");
-        modal.className = "auth-overlay";
-        modal.innerHTML = `
-            <div class="auth-modal">
-                <h2 id="authTitle">◼ Вход в Fembo</h2>
-                <input type="email" id="authEmail" class="auth-input" placeholder="Email" autocomplete="email">
-                <input type="password" id="authPassword" class="auth-input" placeholder="Пароль (мин. 6 символов)" autocomplete="current-password">
-                <button id="authSubmitBtn" class="auth-btn">Войти</button>
-                <div class="auth-switch" id="authSwitch">
-                    Нет аккаунта? <span>Зарегистрироваться</span>
-                </div>
-                <div id="authError" class="auth-error"></div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        
-        let isLogin = true;
-        const authTitle = modal.querySelector("#authTitle");
-        const authSubmitBtn = modal.querySelector("#authSubmitBtn");
-        const authSwitch = modal.querySelector("#authSwitch");
-        const authError = modal.querySelector("#authError");
-        const emailInput = modal.querySelector("#authEmail");
-        const passwordInput = modal.querySelector("#authPassword");
-        
-        function updateForm() {
-            if (isLogin) {
-                authTitle.textContent = "◼ Вход в Fembo";
-                authSubmitBtn.textContent = "Войти";
-                authSwitch.innerHTML = 'Нет аккаунта? <span>Зарегистрироваться</span>';
-            } else {
-                authTitle.textContent = "◼ Регистрация в Fembo";
-                authSubmitBtn.textContent = "Зарегистрироваться";
-                authSwitch.innerHTML = 'Уже есть аккаунт? <span>Войти</span>';
-            }
-            authError.textContent = "";
-        }
-        
-        authSwitch.addEventListener("click", () => {
-            isLogin = !isLogin;
-            updateForm();
-        });
-        
-        authSubmitBtn.addEventListener("click", async () => {
-            const email = emailInput.value.trim();
-            const password = passwordInput.value;
-            
-            if (!email || !password) {
-                authError.textContent = "Заполните все поля";
-                return;
-            }
-            
-            if (!isLogin && password.length < 6) {
-                authError.textContent = "Пароль должен быть не менее 6 символов";
-                return;
-            }
-            
-            try {
-                if (isLogin) {
-                    const result = await signInWithEmailAndPassword(auth, email, password);
-                    console.log("✅ Вход выполнен:", result.user.email);
-                } else {
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    const newUser = userCredential.user;
-                    console.log("✅ Регистрация успешна:", newUser.email);
-                    
-                    const uniqueId = await getUniqueUserId();
-                    const defaultName = email.split('@')[0];
-                    
-                    await saveUserData(newUser.uid, email, defaultName, uniqueId);
-                    console.log("✅ ID пользователя:", uniqueId);
-                }
-                modal.remove();
-            } catch (error) {
-                console.error("❌ Ошибка авторизации:", error);
-                let errorMessage = "Ошибка: ";
-                switch (error.code) {
-                    case "auth/email-already-in-use":
-                        errorMessage += "Email уже используется";
-                        break;
-                    case "auth/invalid-email":
-                        errorMessage += "Некорректный email";
-                        break;
-                    case "auth/user-not-found":
-                        errorMessage += "Пользователь не найден";
-                        break;
-                    case "auth/wrong-password":
-                        errorMessage += "Неверный пароль";
-                        break;
-                    default:
-                        errorMessage += error.message;
-                }
-                authError.textContent = errorMessage;
-            }
-        });
-        
-        emailInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
-        passwordInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
-    }
-    
-    // Функции чата
+    // Показать уведомление
     function showToast(msg) {
         let t = document.querySelector(".toast");
         if (t) t.remove();
@@ -615,6 +437,7 @@
         messagesArea.scrollTop = messagesArea.scrollHeight;
     }
     
+    // Сохранение/загрузка вкладок
     function saveTabs() {
         const tabs = openTabs.filter(t => t.type === "private").map(t => ({ id: t.id, name: t.name }));
         localStorage.setItem("fembo_tabs", JSON.stringify(tabs));
@@ -649,8 +472,7 @@
     }
     
     function updateLastRead(chatId) {
-        const now = Date.now();
-        lastReadTime.set(chatId, now);
+        lastReadTime.set(chatId, Date.now());
         saveLastRead();
     }
     
@@ -659,9 +481,7 @@
         const messages = privateMessages.get(chatId) || [];
         let count = 0;
         for (const msg of messages) {
-            if (msg.fromId !== currentUser?.uid && msg.timestamp > lastRead) {
-                count++;
-            }
+            if (msg.fromId !== currentUser?.uid && msg.timestamp > lastRead) count++;
         }
         return count;
     }
@@ -695,41 +515,22 @@
     function switchTab(index) {
         if (currentChat.type === "private") {
             const l = privateListeners.get(currentChat.id);
-            if (l) {
-                off(l.ref, 'child_added', l.callback);
-                privateListeners.delete(currentChat.id);
-            }
+            if (l) { off(l.ref, 'child_added', l.callback); privateListeners.delete(currentChat.id); }
         }
-        
         activeTabIndex = index;
         currentChat = openTabs[index];
-        
-        if (currentChat.type === "private") {
-            updateLastRead(currentChat.id);
-        } else {
-            updateLastRead("global");
-        }
-        
+        if (currentChat.type === "private") updateLastRead(currentChat.id);
+        else updateLastRead("global");
         renderTabs();
         messagesArea.innerHTML = '';
         
         if (currentChat.type === "global") {
-            if (globalMessages.length === 0) {
-                messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
-            } else {
-                globalMessages.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid);
-                });
-            }
+            if (globalMessages.length === 0) messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
+            else globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid));
         } else {
             const msgs = privateMessages.get(currentChat.id) || [];
-            if (msgs.length === 0) {
-                messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
-            } else {
-                msgs.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
-                });
-            }
+            if (msgs.length === 0) messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
+            else msgs.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid));
             startPrivateListener(currentChat.id);
         }
     }
@@ -738,10 +539,7 @@
         if (openTabs[index].type === "global") return;
         const tab = openTabs[index];
         const l = privateListeners.get(tab.id);
-        if (l) {
-            off(l.ref, 'child_added', l.callback);
-            privateListeners.delete(tab.id);
-        }
+        if (l) { off(l.ref, 'child_added', l.callback); privateListeners.delete(tab.id); }
         openTabs.splice(index, 1);
         saveTabs();
         
@@ -750,27 +548,19 @@
             currentChat = openTabs[activeTabIndex];
             renderTabs();
             messagesArea.innerHTML = '';
-            if (currentChat.type === "global") {
-                globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid));
-            } else {
+            if (currentChat.type === "global") globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid));
+            else {
                 const msgs = privateMessages.get(currentChat.id) || [];
                 msgs.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid));
                 startPrivateListener(currentChat.id);
             }
-        } else if (activeTabIndex > index) {
-            activeTabIndex--;
-            renderTabs();
-        } else {
-            renderTabs();
-        }
+        } else if (activeTabIndex > index) activeTabIndex--;
+        renderTabs();
     }
     
     function openPrivateChat(targetId, targetName, targetUniqueId) {
         const existing = openTabs.findIndex(t => t.type === "private" && t.id === targetId);
-        if (existing !== -1) {
-            switchTab(existing);
-            return;
-        }
+        if (existing !== -1) { switchTab(existing); return; }
         openTabs.push({ type: "private", id: targetId, name: `${targetName} ${targetUniqueId}` });
         saveTabs();
         renderTabs();
@@ -787,37 +577,22 @@
             if (!data || !data.text) return;
             if (globalMessageIds.has(msgId)) return;
             globalMessageIds.add(msgId);
-            
-            globalMessages.push({
-                id: msgId,
-                username: data.username,
-                uniqueId: data.uniqueId || "",
-                text: data.text,
-                timestamp: data.timestamp,
-                userId: data.userId
-            });
+            globalMessages.push({ id: msgId, username: data.username, uniqueId: data.uniqueId || "", text: data.text, timestamp: data.timestamp, userId: data.userId });
             globalMessages.sort((a, b) => a.timestamp - b.timestamp);
-            
             if (currentChat.type === "global") {
                 messagesArea.innerHTML = '';
-                globalMessages.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.userId === currentUser?.uid);
-                });
+                globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.userId === currentUser?.uid));
             }
         });
     }
     
-    // Личный чат (история)
+    // Личный чат
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
-        
         const chatId = [currentUser?.uid, targetId].sort().join('_');
         const chatRef = ref(db, `private_messages/${chatId}`);
         const chatQuery = query(chatRef, limitToLast(100));
-        
-        if (!privateMessageIds.has(targetId)) {
-            privateMessageIds.set(targetId, new Set());
-        }
+        if (!privateMessageIds.has(targetId)) privateMessageIds.set(targetId, new Set());
         const msgIds = privateMessageIds.get(targetId);
         
         const callback = (snapshot) => {
@@ -826,86 +601,49 @@
             if (!data || !data.text) return;
             if (msgIds.has(msgId)) return;
             msgIds.add(msgId);
-            
             let msgs = privateMessages.get(targetId) || [];
-            msgs.push({
-                id: msgId,
-                username: data.username,
-                uniqueId: data.uniqueId || "",
-                text: data.text,
-                timestamp: data.timestamp,
-                fromId: data.fromId,
-                toId: data.toId
-            });
+            msgs.push({ id: msgId, username: data.username, uniqueId: data.uniqueId || "", text: data.text, timestamp: data.timestamp, fromId: data.fromId, toId: data.toId });
             msgs.sort((a, b) => a.timestamp - b.timestamp);
             privateMessages.set(targetId, msgs);
-            
             if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
-                msgs.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
-                });
+                msgs.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid));
                 updateLastRead(targetId);
                 renderTabs();
             }
         };
-        
         onChildAdded(chatQuery, callback);
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // Глобальный слушатель для новых личных сообщений
+    // Глобальный слушатель для новых сообщений
     function startGlobalPrivateListener() {
         if (globalPrivateListener) return;
-        
         const privateMessagesRef = ref(db, "private_messages");
-        
         globalPrivateListener = onChildAdded(privateMessagesRef, (snapshot) => {
             const data = snapshot.val();
             if (!data || !data.text) return;
-            
             if (data.toId === currentUser?.uid && data.fromId !== currentUser?.uid) {
                 const senderId = data.fromId;
                 const senderName = data.username;
                 const senderUniqueId = data.uniqueId || "";
-                const msgTime = data.timestamp;
-                const msgId = snapshot.key;
-                
-                // Добавляем в кэш
-                if (!privateMessages.has(senderId)) {
-                    privateMessages.set(senderId, []);
-                    privateMessageIds.set(senderId, new Set());
-                }
-                
+                if (!privateMessages.has(senderId)) { privateMessages.set(senderId, []); privateMessageIds.set(senderId, new Set()); }
                 const msgs = privateMessages.get(senderId);
                 const msgIdsSet = privateMessageIds.get(senderId);
-                
+                const msgId = snapshot.key;
                 if (!msgIdsSet.has(msgId)) {
                     msgIdsSet.add(msgId);
-                    msgs.push({
-                        id: msgId,
-                        username: data.username,
-                        uniqueId: data.uniqueId || "",
-                        text: data.text,
-                        timestamp: data.timestamp,
-                        fromId: data.fromId,
-                        toId: data.toId
-                    });
+                    msgs.push({ id: msgId, username: data.username, uniqueId: data.uniqueId || "", text: data.text, timestamp: data.timestamp, fromId: data.fromId, toId: data.toId });
                     msgs.sort((a, b) => a.timestamp - b.timestamp);
                     privateMessages.set(senderId, msgs);
                 }
-                
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
-                const lastRead = lastReadTime.get(senderId) || 0;
-                const isNew = msgTime > lastRead;
-                
                 if (!isTabOpen) {
                     openTabs.push({ type: "private", id: senderId, name: `${senderName} ${senderUniqueId}` });
                     saveTabs();
                     renderTabs();
                     showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
-                    
                     if (currentChat.type === "global") {
                         const sysDiv = document.createElement("div");
                         sysDiv.className = "system";
@@ -913,15 +651,12 @@
                         sysDiv.style.color = "#ffaa33";
                         sysDiv.style.border = "1px solid #ffaa33";
                         sysDiv.style.padding = "0.5rem";
-                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку чтобы прочитать.`;
+                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}!`;
                         messagesArea.appendChild(sysDiv);
                         messagesArea.scrollTop = messagesArea.scrollHeight;
                         setTimeout(() => sysDiv.remove(), 8000);
                     }
-                } else if (!isActive && isNew) {
-                    renderTabs();
-                    showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
-                }
+                } else if (!isActive) { renderTabs(); showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`); }
             }
         });
     }
@@ -929,39 +664,30 @@
     // Отправка сообщения
     let lastSend = 0;
     function sendMessage() {
-        if (!userData) {
-            showToast("Загрузка данных пользователя...");
-            return;
-        }
-        
+        if (!myUsername || !myUniqueId) { showToast("Загрузка данных..."); return; }
         const text = messageInput.value.trim();
         if (!text) return;
-        if (Date.now() - lastSend < 500) {
-            showToast("Подождите");
-            return;
-        }
+        if (Date.now() - lastSend < 500) { showToast("Подождите"); return; }
         lastSend = Date.now();
-        
-        console.log("📤 Отправка сообщения от:", userData.username, userData.uniqueId);
         
         if (currentChat.type === "global") {
             push(ref(db, "global_messages"), {
-                username: userData.username,
-                uniqueId: userData.uniqueId,
+                username: myUsername,
+                uniqueId: myUniqueId,
                 text: text,
                 timestamp: Date.now(),
                 userId: currentUser.uid
-            }).catch(err => console.error("Ошибка отправки:", err));
+            }).catch(err => console.error(err));
         } else {
             const chatId = [currentUser.uid, currentChat.id].sort().join('_');
             push(ref(db, `private_messages/${chatId}`), {
-                username: userData.username,
-                uniqueId: userData.uniqueId,
+                username: myUsername,
+                uniqueId: myUniqueId,
                 text: text,
                 timestamp: Date.now(),
                 fromId: currentUser.uid,
                 toId: currentChat.id
-            }).catch(err => console.error("Ошибка отправки:", err));
+            }).catch(err => console.error(err));
             updateLastRead(currentChat.id);
         }
         messageInput.value = "";
@@ -970,11 +696,10 @@
     
     // Статус пользователя
     function updateStatus() {
-        if (!currentUser || !userData) return;
+        if (!currentUser) return;
         set(ref(db, `users/${currentUser.uid}`), {
-            email: userData.email || "",
-            username: userData.username,
-            uniqueId: userData.uniqueId,
+            username: myUsername,
+            uniqueId: myUniqueId,
             lastSeen: Date.now(),
             online: true
         }).catch(err => console.error(err));
@@ -986,26 +711,15 @@
         const users = Array.from(allUsers.entries())
             .filter(([id, u]) => u.name.toLowerCase().includes(term))
             .sort((a, b) => (b[1].online ? 1 : 0) - (a[1].online ? 1 : 0));
-        
-        if (users.length === 0) {
-            usersListDiv.innerHTML = '<div class="system" style="margin:1rem;">◼ Нет пользователей</div>';
-            return;
-        }
-        
+        if (users.length === 0) { usersListDiv.innerHTML = '<div class="system" style="margin:1rem;">◼ Нет пользователей</div>'; return; }
         usersListDiv.innerHTML = users.map(([id, u]) => `
             <div class="user-item" data-id="${id}" data-name="${u.name}" data-uniqueid="${u.uniqueId}">
-                <div>
-                    <span class="user-name">${escapeHtml(u.name)}</span>
-                    <span class="user-id">${escapeHtml(u.uniqueId)}</span>
-                </div>
+                <div><span class="user-name">${escapeHtml(u.name)}</span><span class="user-id">${escapeHtml(u.uniqueId)}</span></div>
                 <div class="user-status ${u.online ? 'status-online' : 'status-offline'}"></div>
             </div>
         `).join('');
-        
         document.querySelectorAll('.user-item').forEach(el => {
-            el.addEventListener('click', () => {
-                openPrivateChat(el.dataset.id, el.dataset.name, el.dataset.uniqueid);
-            });
+            el.addEventListener('click', () => openPrivateChat(el.dataset.id, el.dataset.name, el.dataset.uniqueid));
         });
     }
     
@@ -1026,34 +740,109 @@
     
     searchInput.addEventListener("input", renderUsersList);
     
-    // Инициализация после авторизации
-    async function initChat() {
-        if (!currentUser) return;
+    // Auth Modal
+    function showAuthModal() {
+        const modal = document.createElement("div");
+        modal.className = "auth-overlay";
+        modal.innerHTML = `
+            <div class="auth-modal">
+                <h2 id="authTitle">◼ Вход в Fembo</h2>
+                <input type="email" id="authEmail" class="auth-input" placeholder="Email">
+                <input type="password" id="authPassword" class="auth-input" placeholder="Пароль (мин. 6)">
+                <button id="authSubmitBtn" class="auth-btn">Войти</button>
+                <div class="auth-switch" id="authSwitch">Нет аккаунта? <span>Зарегистрироваться</span></div>
+                <div id="authError" class="auth-error"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
         
-        console.log("🔐 Пользователь авторизован:", currentUser.email);
+        let isLogin = true;
+        const authTitle = modal.querySelector("#authTitle");
+        const authSubmitBtn = modal.querySelector("#authSubmitBtn");
+        const authSwitch = modal.querySelector("#authSwitch");
+        const authError = modal.querySelector("#authError");
+        const emailInput = modal.querySelector("#authEmail");
+        const passwordInput = modal.querySelector("#authPassword");
         
-        const userDataFromDb = await getUserData(currentUser.uid);
-        if (userDataFromDb) {
-            userData = userDataFromDb;
-            userNicknameSpan.textContent = userData.username;
-            userIdDisplaySpan.textContent = userData.uniqueId;
-            console.log("✅ Данные загружены:", userData);
-        } else {
-            console.error("❌ Данные пользователя не найдены!");
-            // Создаем данные если их нет
-            const uniqueId = await getUniqueUserId();
-            const defaultName = currentUser.email.split('@')[0];
-            userData = {
-                username: defaultName,
-                uniqueId: uniqueId,
-                email: currentUser.email
-            };
-            await saveUserData(currentUser.uid, currentUser.email, defaultName, uniqueId);
-            userNicknameSpan.textContent = defaultName;
-            userIdDisplaySpan.textContent = uniqueId;
+        function updateForm() {
+            if (isLogin) {
+                authTitle.textContent = "◼ Вход в Fembo";
+                authSubmitBtn.textContent = "Войти";
+                authSwitch.innerHTML = 'Нет аккаунта? <span>Зарегистрироваться</span>';
+            } else {
+                authTitle.textContent = "◼ Регистрация в Fembo";
+                authSubmitBtn.textContent = "Зарегистрироваться";
+                authSwitch.innerHTML = 'Уже есть аккаунт? <span>Войти</span>';
+            }
+            authError.textContent = "";
         }
         
+        authSwitch.addEventListener("click", () => { isLogin = !isLogin; updateForm(); });
+        
+        authSubmitBtn.addEventListener("click", async () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            if (!email || !password) { authError.textContent = "Заполните все поля"; return; }
+            if (!isLogin && password.length < 6) { authError.textContent = "Пароль должен быть не менее 6 символов"; return; }
+            try {
+                if (isLogin) {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const uniqueId = await getUniqueUserId();
+                    const defaultName = email.split('@')[0];
+                    await set(ref(db, `users/${userCredential.user.uid}`), {
+                        email: email,
+                        username: defaultName,
+                        uniqueId: uniqueId,
+                        lastSeen: Date.now(),
+                        online: true
+                    });
+                }
+                modal.remove();
+            } catch (error) {
+                let errorMessage = "Ошибка: ";
+                switch (error.code) {
+                    case "auth/email-already-in-use": errorMessage += "Email уже используется"; break;
+                    case "auth/invalid-email": errorMessage += "Некорректный email"; break;
+                    case "auth/user-not-found": errorMessage += "Пользователь не найден"; break;
+                    case "auth/wrong-password": errorMessage += "Неверный пароль"; break;
+                    default: errorMessage += error.message;
+                }
+                authError.textContent = errorMessage;
+            }
+        });
+        
+        emailInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
+        passwordInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
+    }
+    
+    // Инициализация чата
+    async function initChat(user) {
+        currentUser = user;
+        const snapshot = await get(ref(db, `users/${user.uid}`));
+        const userDataFromDb = snapshot.val();
+        
+        if (userDataFromDb) {
+            myUsername = userDataFromDb.username;
+            myUniqueId = userDataFromDb.uniqueId;
+        } else {
+            myUsername = user.email.split('@')[0];
+            myUniqueId = generateUniqueId();
+            await set(ref(db, `users/${user.uid}`), {
+                email: user.email,
+                username: myUsername,
+                uniqueId: myUniqueId,
+                lastSeen: Date.now(),
+                online: true
+            });
+            await set(ref(db, `unique_ids/${myUniqueId}`), { taken: true, userId: user.uid });
+        }
+        
+        userNicknameSpan.textContent = myUsername;
+        userIdDisplaySpan.textContent = myUniqueId;
         chatContainer.style.display = "flex";
+        
         loadTabs();
         loadLastRead();
         startGlobalListener();
@@ -1063,30 +852,29 @@
         renderTabs();
         
         setTimeout(() => {
-            openTabs.forEach(tab => {
-                if (tab.type === "private") {
-                    startPrivateListener(tab.id);
-                }
-            });
+            openTabs.forEach(tab => { if (tab.type === "private") startPrivateListener(tab.id); });
         }, 1000);
     }
     
-    // Auth state listener
+    // Auth state
     onAuthStateChanged(auth, (user) => {
         if (user) {
-            currentUser = user;
-            initChat();
+            initChat(user);
         } else {
             chatContainer.style.display = "none";
             showAuthModal();
         }
     });
     
-    // Обработчики кнопок
+    // Обработчики
     editNameBtn.addEventListener("click", async () => {
-        const newName = prompt("Введите ваше имя:", userData?.username);
+        const newName = prompt("Введите ваше имя:", myUsername);
         if (newName && newName.trim()) {
-            await updateUsername(newName.trim().slice(0, 24));
+            myUsername = newName.trim().slice(0, 24);
+            await set(ref(db, `users/${currentUser.uid}/username`), myUsername);
+            userNicknameSpan.textContent = myUsername;
+            updateStatus();
+            showToast(`Имя изменено на ${myUsername}`);
         }
     });
     
@@ -1103,17 +891,12 @@
     });
     
     window.addEventListener("beforeunload", () => {
-        if (currentUser && userData) {
-            set(ref(db, `users/${currentUser.uid}`), {
-                ...userData,
-                lastSeen: Date.now(),
-                online: false
-            });
+        if (currentUser) {
+            set(ref(db, `users/${currentUser.uid}`), { username: myUsername, uniqueId: myUniqueId, lastSeen: Date.now(), online: false });
         }
     });
     
-    console.log("🚀 Чат с регистрацией запущен!");
-    console.log("📝 Формат ID: 6 цифр + буква (например: 123456A)");
+    console.log("🚀 Чат запущен!");
 </script>
 </body>
 </html>
