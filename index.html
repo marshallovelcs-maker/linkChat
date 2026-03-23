@@ -640,7 +640,7 @@
     
     // ========== ГЛАВНЫЙ СЛУШАТЕЛЬ - СОЗДАЕТ ВКЛАДКИ ==========
     function setupGlobalPrivateListener() {
-        console.log("🔔 ЗАПУСК СЛУШАТЕЛЯ...");
+        console.log("🔔 СЛУШАТЕЛЬ ЗАПУЩЕН!");
         
         const privateMessagesRef = ref(db, "private_messages");
         
@@ -652,17 +652,17 @@
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 Получено: для ${data.toId}, от ${data.fromId}`);
+            console.log(`📨 СООБЩЕНИЕ: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
             
-            // Проверяем, что сообщение для текущего пользователя
+            // ПРОВЕРЯЕМ, ЧТО СООБЩЕНИЕ ДЛЯ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
                 const senderId = data.fromId;
                 const senderName = data.username;
                 const senderUniqueId = data.uniqueId || "";
                 
-                console.log(`✅ НОВОЕ СООБЩЕНИЕ от ${senderName}`);
+                console.log(`✅ НОВОЕ СООБЩЕНИЕ ОТ: ${senderName}`);
                 
-                // Добавляем в кэш
+                // ДОБАВЛЯЕМ СООБЩЕНИЕ В КЭШ
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -686,16 +686,18 @@
                 
                 // ПРОВЕРЯЕМ, ОТКРЫТА ЛИ ВКЛАДКА
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
-                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 
-                console.log(`📊 Вкладка открыта: ${isTabOpen}, Активна: ${isActive}`);
+                console.log(`📊 Вкладка открыта: ${isTabOpen}`);
                 
-                // ЕСЛИ ВКЛАДКИ НЕТ - СОЗДАЕМ!
+                // ЕСЛИ ВКЛАДКА ЗАКРЫТА - СОЗДАЕМ!
                 if (!isTabOpen) {
                     console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ: ${senderName}`);
                     openTabs.push({ type: "private", id: senderId, name: `${senderName} ${senderUniqueId}` });
                     saveTabs();
                     renderTabs(); // МГНОВЕННОЕ ОБНОВЛЕНИЕ
+                    
+                    // ПОКАЗЫВАЕМ ALERT ДЛЯ ПРОВЕРКИ
+                    alert(`🔔 Новое сообщение от ${senderName}! Вкладка добавлена.`);
                     
                     // Системное сообщение
                     const sysDiv = document.createElement("div");
@@ -709,22 +711,21 @@
                     messagesArea.scrollTop = messagesArea.scrollHeight;
                     setTimeout(() => sysDiv.remove(), 8000);
                 } else {
-                    // Вкладка есть - обновляем счетчик
+                    // Вкладка есть - просто обновляем счетчик
                     renderTabs();
                 }
                 
-                // Уведомление
+                // УВЕДОМЛЕНИЕ
                 showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Если чат активен - показываем сообщение
+                // ЕСЛИ ЧАТ АКТИВЕН - ПОКАЗЫВАЕМ СООБЩЕНИЕ
+                const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 if (isActive) {
                     addMessageToDOM(data.username, data.uniqueId || "", data.text, data.timestamp, false, true);
                     updateLastRead(senderId);
                 }
             }
         });
-        
-        console.log("✅ СЛУШАТЕЛЬ ЗАПУЩЕН");
     }
     
     // Отправка сообщения
@@ -898,7 +899,7 @@
         loadTabs();
         loadLastRead();
         startGlobalListener();
-        setupGlobalPrivateListener();
+        setupGlobalPrivateListener(); // ЗАПУСКАЕМ СЛУШАТЕЛЬ
         updateStatus();
         setInterval(updateStatus, 30000);
         renderTabs();
@@ -908,9 +909,6 @@
         }, 1000);
         
         console.log("🚀 ЧАТ ЗАПУЩЕН!");
-        console.log("👤 Ваш ID:", currentUser.uid);
-        console.log("📝 Ваше имя:", myUsername);
-        console.log("🔢 Ваш уникальный ID:", myUniqueId);
     }
     
     onAuthStateChanged(auth, (user) => {
