@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fembo — Чат</title>
+    <title>Fembo — Чат с регистрацией</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -61,6 +61,7 @@
         }
         .user-item:hover { background: #1a1a1a; }
         .user-name { color: #e0e0e0; font-size: 0.85rem; }
+        .user-id { color: #666; font-size: 0.7rem; font-family: monospace; margin-left: 0.5rem; }
         .user-status { width: 8px; height: 8px; border-radius: 50%; }
         .status-online { background: #2ecc71; }
         .status-offline { background: #7f8c8d; }
@@ -93,6 +94,11 @@
             font-weight: 600;
             font-size: 0.8rem;
         }
+        .user-info .user-id-display {
+            color: #666;
+            font-size: 0.7rem;
+            font-family: monospace;
+        }
         .edit-name-btn {
             background: #2a2a2a;
             border: none;
@@ -103,6 +109,16 @@
             border-radius: 12px;
         }
         .edit-name-btn:hover { background: #3a3a3a; color: #fff; }
+        .logout-btn {
+            background: #2a2a2a;
+            border: 1px solid #5a3a3a;
+            color: #ff8888;
+            padding: 0.3rem 0.8rem;
+            cursor: pointer;
+            font-size: 0.7rem;
+            border-radius: 6px;
+        }
+        .logout-btn:hover { background: #3a2a2a; color: #ffaaaa; }
         .copy-btn {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
@@ -187,8 +203,14 @@
             font-size: 0.65rem;
             color: #888;
             margin-top: 0.2rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
-        .message.own .sender { text-align: right; }
+        .message.own .sender { justify-content: flex-end; }
+        .sender-name { font-weight: 600; color: #aaa; }
+        .sender-id { color: #666; font-family: monospace; }
+        .message-time { color: #666; }
         .system {
             text-align: center;
             font-size: 0.7rem;
@@ -242,10 +264,71 @@
             border-radius: 8px;
             z-index: 1000;
         }
+        
+        /* Auth Modal */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .auth-modal {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            padding: 2rem;
+            width: 90%;
+            max-width: 400px;
+        }
+        .auth-modal h2 {
+            color: #fff;
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+        }
+        .auth-input {
+            width: 100%;
+            background: #111;
+            border: 1px solid #2a2a2a;
+            padding: 0.8rem;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            outline: none;
+        }
+        .auth-input:focus { border-color: #4a4a4a; }
+        .auth-btn {
+            width: 100%;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            padding: 0.8rem;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            margin-bottom: 1rem;
+        }
+        .auth-btn:hover { background: #2a2a2a; }
+        .auth-switch {
+            text-align: center;
+            color: #888;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .auth-switch span { color: #ffaa66; text-decoration: underline; }
+        .auth-error {
+            color: #ff8888;
+            font-size: 0.8rem;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 <body>
-<div class="chat-container">
+<div class="chat-container" id="chatContainer" style="display: none;">
     <div class="sidebar">
         <div class="sidebar-header">
             <h3>◼ Пользователи</h3>
@@ -262,9 +345,13 @@
             <div class="user-info">
                 <span>👤</span>
                 <span class="nickname" id="userNickname"></span>
+                <span class="user-id-display" id="userIdDisplay"></span>
                 <button class="edit-name-btn" id="editNameBtn">✎</button>
             </div>
-            <button class="copy-btn" id="copyBtn">⎘</button>
+            <div style="display: flex; gap: 8px;">
+                <button class="logout-btn" id="logoutBtn">🚪 Выйти</button>
+                <button class="copy-btn" id="copyBtn">⎘</button>
+            </div>
         </div>
         <div class="tabs" id="tabsContainer"></div>
         <div class="messages-area" id="messagesArea"></div>
@@ -279,14 +366,16 @@
     {
         "imports": {
             "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-            "firebase/database": "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js"
+            "firebase/database": "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"
         }
     }
 </script>
 
 <script type="module">
     import { initializeApp } from "firebase/app";
-    import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, off } from "firebase/database";
+    import { getDatabase, ref, push, onChildAdded, query, limitToLast, onValue, set, off, get } from "firebase/database";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
     const firebaseConfig = {
         apiKey: "AIzaSyACbUMNMGOQLg-iCDVuceIcld7UJTayYqU",
@@ -300,8 +389,10 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const auth = getAuth(app);
     
     // DOM
+    const chatContainer = document.getElementById("chatContainer");
     const messagesArea = document.getElementById("messagesArea");
     const messageInput = document.getElementById("messageInput");
     const sendBtn = document.getElementById("sendBtn");
@@ -310,33 +401,13 @@
     const searchInput = document.getElementById("searchUsers");
     const tabsContainer = document.getElementById("tabsContainer");
     const userNicknameSpan = document.getElementById("userNickname");
+    const userIdDisplaySpan = document.getElementById("userIdDisplay");
     const editNameBtn = document.getElementById("editNameBtn");
-    
-    // User data
-    let userId = localStorage.getItem("fembo_id");
-    if (!userId) {
-        userId = "u_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6);
-        localStorage.setItem("fembo_id", userId);
-    }
-    let username = localStorage.getItem("fembo_name") || "Гость_" + Math.floor(Math.random() * 1000);
-    
-    function updateNicknameDisplay() {
-        userNicknameSpan.textContent = username;
-    }
-    updateNicknameDisplay();
-    
-    editNameBtn.addEventListener("click", () => {
-        const newName = prompt("Введите ваше имя:", username);
-        if (newName && newName.trim()) {
-            username = newName.trim().slice(0, 24);
-            localStorage.setItem("fembo_name", username);
-            updateNicknameDisplay();
-            updateStatus();
-            showToast(`Имя изменено на ${username}`);
-        }
-    });
+    const logoutBtn = document.getElementById("logoutBtn");
     
     // State
+    let currentUser = null;
+    let userData = null;
     let currentChat = { type: "global", id: null, name: "Общий чат" };
     let openTabs = [{ type: "global", id: null, name: "Общий чат" }];
     let activeTabIndex = 0;
@@ -356,11 +427,194 @@
     let privateListeners = new Map();
     let globalPrivateListener = null;
     
-    // Save/Load
+    // Генерация уникального ID в формате #000000A
+    function generateUniqueId() {
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+        const randomNumbers = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+        return `#${randomNumbers}${randomLetter}`;
+    }
+    
+    // Проверка уникальности ID в Firebase
+    async function getUniqueUserId() {
+        let uniqueId;
+        let isUnique = false;
+        let attempts = 0;
+        
+        while (!isUnique && attempts < 50) {
+            uniqueId = generateUniqueId();
+            const idRef = ref(db, `unique_ids/${uniqueId}`);
+            const snapshot = await get(idRef);
+            if (!snapshot.exists()) {
+                isUnique = true;
+                await set(idRef, { taken: true, userId: auth.currentUser?.uid });
+            }
+            attempts++;
+        }
+        return uniqueId;
+    }
+    
+    // Сохранение данных пользователя
+    async function saveUserData(userId, email, username, uniqueId) {
+        await set(ref(db, `users/${userId}`), {
+            email: email,
+            username: username,
+            uniqueId: uniqueId,
+            lastSeen: Date.now(),
+            online: true
+        });
+    }
+    
+    // Получение данных пользователя
+    async function getUserData(userId) {
+        const snapshot = await get(ref(db, `users/${userId}`));
+        return snapshot.val();
+    }
+    
+    // Обновление ника
+    async function updateUsername(newName) {
+        if (!currentUser) return;
+        await set(ref(db, `users/${currentUser.uid}/username`), newName);
+        userData.username = newName;
+        userNicknameSpan.textContent = newName;
+        updateStatus();
+        showToast(`Имя изменено на ${newName}`);
+    }
+    
+    // Auth Modal
+    function showAuthModal() {
+        const modal = document.createElement("div");
+        modal.className = "auth-overlay";
+        modal.innerHTML = `
+            <div class="auth-modal">
+                <h2 id="authTitle">◼ Вход в Fembo</h2>
+                <input type="email" id="authEmail" class="auth-input" placeholder="Email" autocomplete="email">
+                <input type="password" id="authPassword" class="auth-input" placeholder="Пароль (мин. 6 символов)" autocomplete="current-password">
+                <button id="authSubmitBtn" class="auth-btn">Войти</button>
+                <div class="auth-switch" id="authSwitch">
+                    Нет аккаунта? <span>Зарегистрироваться</span>
+                </div>
+                <div id="authError" class="auth-error"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        let isLogin = true;
+        const authTitle = modal.querySelector("#authTitle");
+        const authSubmitBtn = modal.querySelector("#authSubmitBtn");
+        const authSwitch = modal.querySelector("#authSwitch");
+        const authError = modal.querySelector("#authError");
+        const emailInput = modal.querySelector("#authEmail");
+        const passwordInput = modal.querySelector("#authPassword");
+        
+        function updateForm() {
+            if (isLogin) {
+                authTitle.textContent = "◼ Вход в Fembo";
+                authSubmitBtn.textContent = "Войти";
+                authSwitch.innerHTML = 'Нет аккаунта? <span>Зарегистрироваться</span>';
+            } else {
+                authTitle.textContent = "◼ Регистрация в Fembo";
+                authSubmitBtn.textContent = "Зарегистрироваться";
+                authSwitch.innerHTML = 'Уже есть аккаунт? <span>Войти</span>';
+            }
+            authError.textContent = "";
+        }
+        
+        authSwitch.addEventListener("click", () => {
+            isLogin = !isLogin;
+            updateForm();
+        });
+        
+        authSubmitBtn.addEventListener("click", async () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            
+            if (!email || !password) {
+                authError.textContent = "Заполните все поля";
+                return;
+            }
+            
+            if (!isLogin && password.length < 6) {
+                authError.textContent = "Пароль должен быть не менее 6 символов";
+                return;
+            }
+            
+            try {
+                if (isLogin) {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const newUser = userCredential.user;
+                    
+                    const uniqueId = await getUniqueUserId();
+                    const defaultName = email.split('@')[0];
+                    
+                    await saveUserData(newUser.uid, email, defaultName, uniqueId);
+                }
+                modal.remove();
+            } catch (error) {
+                let errorMessage = "Ошибка: ";
+                switch (error.code) {
+                    case "auth/email-already-in-use":
+                        errorMessage += "Email уже используется";
+                        break;
+                    case "auth/invalid-email":
+                        errorMessage += "Некорректный email";
+                        break;
+                    case "auth/user-not-found":
+                        errorMessage += "Пользователь не найден";
+                        break;
+                    case "auth/wrong-password":
+                        errorMessage += "Неверный пароль";
+                        break;
+                    default:
+                        errorMessage += error.message;
+                }
+                authError.textContent = errorMessage;
+            }
+        });
+        
+        emailInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
+        passwordInput.addEventListener("keypress", (e) => { if (e.key === "Enter") authSubmitBtn.click(); });
+    }
+    
+    // Функции чата
+    function showToast(msg) {
+        let t = document.querySelector(".toast");
+        if (t) t.remove();
+        const d = document.createElement("div");
+        d.className = "toast";
+        d.innerHTML = `📩 ${escapeHtml(msg)}`;
+        document.body.appendChild(d);
+        setTimeout(() => d.remove(), 3000);
+    }
+    
+    function escapeHtml(str) {
+        if (!str) return "";
+        return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+    }
+    
+    function addMessageToDOM(name, uniqueId, text, ts, isOwn) {
+        const div = document.createElement("div");
+        div.className = `message ${isOwn ? 'own' : ''}`;
+        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        div.innerHTML = `
+            <div class="bubble">${escapeHtml(text)}</div>
+            <div class="sender">
+                <span class="sender-name">${escapeHtml(name)}</span>
+                <span class="sender-id">${escapeHtml(uniqueId)}</span>
+                <span class="message-time">${time}</span>
+            </div>
+        `;
+        messagesArea.appendChild(div);
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
+    
     function saveTabs() {
         const tabs = openTabs.filter(t => t.type === "private").map(t => ({ id: t.id, name: t.name }));
         localStorage.setItem("fembo_tabs", JSON.stringify(tabs));
     }
+    
     function loadTabs() {
         try {
             const saved = localStorage.getItem("fembo_tabs");
@@ -382,6 +636,7 @@
             }
         } catch(e) {}
     }
+    
     function saveLastRead() {
         const obj = {};
         lastReadTime.forEach((v, k) => obj[k] = v);
@@ -399,38 +654,11 @@
         const messages = privateMessages.get(chatId) || [];
         let count = 0;
         for (const msg of messages) {
-            if (msg.fromId !== userId && msg.timestamp > lastRead) {
+            if (msg.fromId !== currentUser?.uid && msg.timestamp > lastRead) {
                 count++;
             }
         }
         return count;
-    }
-    
-    function showToast(msg) {
-        let t = document.querySelector(".toast");
-        if (t) t.remove();
-        const d = document.createElement("div");
-        d.className = "toast";
-        d.innerHTML = `📩 ${escapeHtml(msg)}`;
-        document.body.appendChild(d);
-        setTimeout(() => d.remove(), 3000);
-    }
-    
-    function escapeHtml(str) {
-        if (!str) return "";
-        return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
-    }
-    
-    function addMessageToDOM(name, text, ts, isOwn) {
-        const div = document.createElement("div");
-        div.className = `message ${isOwn ? 'own' : ''}`;
-        const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        div.innerHTML = `
-            <div class="bubble">${escapeHtml(text)}</div>
-            <div class="sender">${escapeHtml(name)} • ${time}</div>
-        `;
-        messagesArea.appendChild(div);
-        messagesArea.scrollTop = messagesArea.scrollHeight;
     }
     
     function renderTabs() {
@@ -485,7 +713,7 @@
                 messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
             } else {
                 globalMessages.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId);
+                    addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid);
                 });
             }
         } else {
@@ -494,7 +722,7 @@
                 messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
             } else {
                 msgs.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
+                    addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
                 });
             }
             startPrivateListener(currentChat.id);
@@ -518,10 +746,10 @@
             renderTabs();
             messagesArea.innerHTML = '';
             if (currentChat.type === "global") {
-                globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId));
+                globalMessages.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid));
             } else {
                 const msgs = privateMessages.get(currentChat.id) || [];
-                msgs.forEach(msg => addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId));
+                msgs.forEach(msg => addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.fromId === currentUser?.uid));
                 startPrivateListener(currentChat.id);
             }
         } else if (activeTabIndex > index) {
@@ -532,13 +760,13 @@
         }
     }
     
-    function openPrivateChat(targetId, targetName) {
+    function openPrivateChat(targetId, targetName, targetUniqueId) {
         const existing = openTabs.findIndex(t => t.type === "private" && t.id === targetId);
         if (existing !== -1) {
             switchTab(existing);
             return;
         }
-        openTabs.push({ type: "private", id: targetId, name: targetName });
+        openTabs.push({ type: "private", id: targetId, name: `${targetName} ${targetUniqueId}` });
         saveTabs();
         renderTabs();
         switchTab(openTabs.length - 1);
@@ -558,6 +786,7 @@
             globalMessages.push({
                 id: msgId,
                 username: data.username,
+                uniqueId: data.uniqueId || "",
                 text: data.text,
                 timestamp: data.timestamp,
                 userId: data.userId
@@ -567,7 +796,7 @@
             if (currentChat.type === "global") {
                 messagesArea.innerHTML = '';
                 globalMessages.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.userId === userId);
+                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.userId === currentUser?.uid);
                 });
             }
         });
@@ -577,7 +806,7 @@
     function startPrivateListener(targetId) {
         if (privateListeners.has(targetId)) return;
         
-        const chatId = [userId, targetId].sort().join('_');
+        const chatId = [currentUser?.uid, targetId].sort().join('_');
         const chatRef = ref(db, `private_messages/${chatId}`);
         const chatQuery = query(chatRef, limitToLast(100));
         
@@ -597,6 +826,7 @@
             msgs.push({
                 id: msgId,
                 username: data.username,
+                uniqueId: data.uniqueId || "",
                 text: data.text,
                 timestamp: data.timestamp,
                 fromId: data.fromId,
@@ -608,7 +838,7 @@
             if (currentChat.type === "private" && currentChat.id === targetId) {
                 messagesArea.innerHTML = '';
                 msgs.forEach(msg => {
-                    addMessageToDOM(msg.username, msg.text, msg.timestamp, msg.fromId === userId);
+                    addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid);
                 });
                 updateLastRead(targetId);
                 renderTabs();
@@ -619,11 +849,9 @@
         privateListeners.set(targetId, { ref: chatQuery, callback });
     }
     
-    // Глобальный слушатель для новых личных сообщений - СОЗДАЕТ ВКЛАДКИ
+    // Глобальный слушатель для новых личных сообщений
     function startGlobalPrivateListener() {
         if (globalPrivateListener) return;
-        
-        console.log("🔔 Глобальный слушатель запущен");
         
         const privateMessagesRef = ref(db, "private_messages");
         
@@ -631,16 +859,14 @@
             const data = snapshot.val();
             if (!data || !data.text) return;
             
-            // Проверяем, это сообщение для текущего пользователя и не от себя
-            if (data.toId === userId && data.fromId !== userId) {
+            if (data.toId === currentUser?.uid && data.fromId !== currentUser?.uid) {
                 const senderId = data.fromId;
                 const senderName = data.username;
+                const senderUniqueId = data.uniqueId || "";
                 const msgTime = data.timestamp;
                 const msgId = snapshot.key;
                 
-                console.log(`📨 НОВОЕ СООБЩЕНИЕ от ${senderName}`);
-                
-                // Добавляем сообщение в кэш
+                // Добавляем в кэш
                 if (!privateMessages.has(senderId)) {
                     privateMessages.set(senderId, []);
                     privateMessageIds.set(senderId, new Set());
@@ -654,6 +880,7 @@
                     msgs.push({
                         id: msgId,
                         username: data.username,
+                        uniqueId: data.uniqueId || "",
                         text: data.text,
                         timestamp: data.timestamp,
                         fromId: data.fromId,
@@ -663,25 +890,17 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
-                // Проверяем, открыта ли вкладка
                 const isTabOpen = openTabs.some(tab => tab.type === "private" && tab.id === senderId);
                 const isActive = (currentChat.type === "private" && currentChat.id === senderId);
                 const lastRead = lastReadTime.get(senderId) || 0;
                 const isNew = msgTime > lastRead;
                 
-                console.log(`📊 isTabOpen=${isTabOpen}, isActive=${isActive}, isNew=${isNew}`);
-                
-                // ВСЕГДА создаем вкладку, если её нет
                 if (!isTabOpen) {
-                    console.log(`➕ СОЗДАЮ НОВУЮ ВКЛАДКУ для ${senderName}`);
-                    openTabs.push({ type: "private", id: senderId, name: senderName });
+                    openTabs.push({ type: "private", id: senderId, name: `${senderName} ${senderUniqueId}` });
                     saveTabs();
                     renderTabs();
+                    showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                     
-                    // Показываем уведомление
-                    showToast(`💬 Новое сообщение от ${senderName}`);
-                    
-                    // Системное сообщение в общий чат
                     if (currentChat.type === "global") {
                         const sysDiv = document.createElement("div");
                         sysDiv.className = "system";
@@ -689,21 +908,17 @@
                         sysDiv.style.color = "#ffaa33";
                         sysDiv.style.border = "1px solid #ffaa33";
                         sysDiv.style.padding = "0.5rem";
-                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)}! Нажмите на вкладку "${escapeHtml(senderName)}" чтобы прочитать.`;
+                        sysDiv.innerHTML = `✨ НОВОЕ ЛИЧНОЕ СООБЩЕНИЕ от ${escapeHtml(senderName)} ${escapeHtml(senderUniqueId)}! Нажмите на вкладку чтобы прочитать.`;
                         messagesArea.appendChild(sysDiv);
                         messagesArea.scrollTop = messagesArea.scrollHeight;
                         setTimeout(() => sysDiv.remove(), 8000);
                     }
                 } else if (!isActive && isNew) {
-                    // Вкладка есть, обновляем счетчик
-                    console.log(`🔔 Обновляю счетчик для ${senderName}`);
                     renderTabs();
-                    showToast(`💬 Новое сообщение от ${senderName}`);
+                    showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 }
             }
         });
-        
-        console.log("✅ Глобальный слушатель запущен");
     }
     
     // Отправка сообщения
@@ -719,18 +934,20 @@
         
         if (currentChat.type === "global") {
             push(ref(db, "global_messages"), {
-                username: username,
+                username: userData.username,
+                uniqueId: userData.uniqueId,
                 text: text,
                 timestamp: Date.now(),
-                userId: userId
+                userId: currentUser.uid
             }).catch(err => console.error(err));
         } else {
-            const chatId = [userId, currentChat.id].sort().join('_');
+            const chatId = [currentUser.uid, currentChat.id].sort().join('_');
             push(ref(db, `private_messages/${chatId}`), {
-                username: username,
+                username: userData.username,
+                uniqueId: userData.uniqueId,
                 text: text,
                 timestamp: Date.now(),
-                fromId: userId,
+                fromId: currentUser.uid,
                 toId: currentChat.id
             }).catch(err => console.error(err));
             updateLastRead(currentChat.id);
@@ -741,8 +958,11 @@
     
     // Статус пользователя
     function updateStatus() {
-        set(ref(db, `users/${userId}`), {
-            username: username,
+        if (!currentUser) return;
+        set(ref(db, `users/${currentUser.uid}`), {
+            email: userData?.email || "",
+            username: userData?.username || "",
+            uniqueId: userData?.uniqueId || "",
             lastSeen: Date.now(),
             online: true
         }).catch(err => console.error(err));
@@ -761,15 +981,18 @@
         }
         
         usersListDiv.innerHTML = users.map(([id, u]) => `
-            <div class="user-item" data-id="${id}" data-name="${u.name}">
-                <span class="user-name">${escapeHtml(u.name)}</span>
+            <div class="user-item" data-id="${id}" data-name="${u.name}" data-uniqueid="${u.uniqueId}">
+                <div>
+                    <span class="user-name">${escapeHtml(u.name)}</span>
+                    <span class="user-id">${escapeHtml(u.uniqueId)}</span>
+                </div>
                 <div class="user-status ${u.online ? 'status-online' : 'status-offline'}"></div>
             </div>
         `).join('');
         
         document.querySelectorAll('.user-item').forEach(el => {
             el.addEventListener('click', () => {
-                openPrivateChat(el.dataset.id, el.dataset.name);
+                openPrivateChat(el.dataset.id, el.dataset.name, el.dataset.uniqueid);
             });
         });
     }
@@ -780,9 +1003,9 @@
         if (data) {
             const now = Date.now();
             for (let id in data) {
-                if (id !== userId) {
+                if (id !== currentUser?.uid) {
                     const online = (now - (data[id].lastSeen || 0) < 120000);
-                    allUsers.set(id, { name: data[id].username, online });
+                    allUsers.set(id, { name: data[id].username, uniqueId: data[id].uniqueId, online });
                 }
             }
         }
@@ -791,7 +1014,59 @@
     
     searchInput.addEventListener("input", renderUsersList);
     
-    // Инициализация
+    // Инициализация после авторизации
+    async function initChat() {
+        if (!currentUser) return;
+        
+        const userDataFromDb = await getUserData(currentUser.uid);
+        if (userDataFromDb) {
+            userData = userDataFromDb;
+            userNicknameSpan.textContent = userData.username;
+            userIdDisplaySpan.textContent = userData.uniqueId;
+        }
+        
+        chatContainer.style.display = "flex";
+        loadTabs();
+        loadLastRead();
+        startGlobalListener();
+        startGlobalPrivateListener();
+        updateStatus();
+        setInterval(updateStatus, 30000);
+        renderTabs();
+        
+        setTimeout(() => {
+            openTabs.forEach(tab => {
+                if (tab.type === "private") {
+                    startPrivateListener(tab.id);
+                }
+            });
+        }, 1000);
+    }
+    
+    // Auth state listener
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            initChat();
+        } else {
+            chatContainer.style.display = "none";
+            showAuthModal();
+        }
+    });
+    
+    // Обработчики кнопок
+    editNameBtn.addEventListener("click", async () => {
+        const newName = prompt("Введите ваше имя:", userData?.username);
+        if (newName && newName.trim()) {
+            await updateUsername(newName.trim().slice(0, 24));
+        }
+    });
+    
+    logoutBtn.addEventListener("click", async () => {
+        await signOut(auth);
+        location.reload();
+    });
+    
     sendBtn.addEventListener("click", sendMessage);
     messageInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
     copyBtn.addEventListener("click", () => {
@@ -799,31 +1074,17 @@
         showToast("Ссылка скопирована");
     });
     
-    loadTabs();
-    loadLastRead();
-    startGlobalListener();
-    startGlobalPrivateListener();
-    updateStatus();
-    setInterval(updateStatus, 30000);
-    
     window.addEventListener("beforeunload", () => {
-        set(ref(db, `users/${userId}`), { username, lastSeen: Date.now(), online: false });
+        if (currentUser) {
+            set(ref(db, `users/${currentUser.uid}`), {
+                ...userData,
+                lastSeen: Date.now(),
+                online: false
+            });
+        }
     });
     
-    renderTabs();
-    
-    setTimeout(() => {
-        openTabs.forEach(tab => {
-            if (tab.type === "private") {
-                startPrivateListener(tab.id);
-            }
-        });
-    }, 1000);
-    
-    console.log("🚀 Чат запущен!");
-    console.log("👤 Ваш ID:", userId);
-    console.log("📝 Ваше имя:", username);
-    console.log("💡 При получении нового сообщения будет создаваться новая вкладка");
+    console.log("🚀 Чат с регистрацией запущен!");
 </script>
 </body>
 </html>
