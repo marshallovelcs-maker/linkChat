@@ -59,7 +59,6 @@
             border: 1px solid #4a4a4a;
             cursor: pointer;
             color: #e0e0e0;
-            transition: all 0.2s;
         }
         .global-chat-btn:hover { background: #2a2a2a; }
         .user-item {
@@ -81,7 +80,7 @@
         }
         @keyframes blinkBg {
             0%, 100% { background: #3a6a3a; }
-            50% { background: #ffaa33; color: #000; }
+            50% { background: #ffaa33; }
         }
         .user-info {
             display: flex;
@@ -104,8 +103,8 @@
             animation: pulseBadge 1s infinite;
         }
         @keyframes pulseBadge {
-            0%, 100% { transform: scale(1); background: #ff4444; }
-            50% { transform: scale(1.1); background: #ff6666; }
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
         }
         .user-status { width: 8px; height: 8px; border-radius: 50%; }
         .status-online { background: #2ecc71; }
@@ -264,26 +263,12 @@
             background: #2a2a2a;
             border: 1px solid #ffaa33;
             color: #ffaa33;
-            padding: 0.5rem 1rem;
+            padding: 0.8rem 1.5rem;
             border-radius: 8px;
             z-index: 1000;
-        }
-        .notification-bell {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: #ff4444;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            z-index: 1000;
-            animation: shake 0.5s ease-in-out;
-        }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
+            font-weight: bold;
+            font-size: 0.9rem;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
         .auth-overlay {
             position: fixed;
@@ -461,6 +446,7 @@
         return uniqueId;
     }
     
+    // ЯРКОЕ УВЕДОМЛЕНИЕ - гарантированно видно!
     function showNotification(msg) {
         // Всплывающее уведомление
         let toast = document.querySelector(".toast");
@@ -469,19 +455,20 @@
         d.className = "toast";
         d.innerHTML = `📩 ${escapeHtml(msg)}`;
         document.body.appendChild(d);
-        setTimeout(() => d.remove(), 4000);
         
-        // Мигающая иконка в заголовке страницы
-        let originalTitle = document.title;
-        let blinkInterval = setInterval(() => {
-            document.title = document.title === "🔔 Новое сообщение!" ? originalTitle : "🔔 Новое сообщение!";
-        }, 800);
-        setTimeout(() => {
-            clearInterval(blinkInterval);
-            document.title = originalTitle;
-        }, 5000);
+        // Мигание заголовка вкладки
+        const originalTitle = document.title;
+        let count = 0;
+        const interval = setInterval(() => {
+            document.title = count % 2 === 0 ? "🔔 НОВОЕ СООБЩЕНИЕ! 🔔" : originalTitle;
+            count++;
+            if (count > 10) {
+                clearInterval(interval);
+                document.title = originalTitle;
+            }
+        }, 500);
         
-        // Звук (простой beep через Web Audio)
+        // Звук
         try {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioCtx.createOscillator();
@@ -489,11 +476,16 @@
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             oscillator.frequency.value = 800;
-            gainNode.gain.value = 0.3;
+            gainNode.gain.value = 0.2;
             oscillator.start();
             gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
             oscillator.stop(audioCtx.currentTime + 0.5);
         } catch(e) { console.log("Звук не поддерживается"); }
+        
+        // Автоматическое исчезновение через 4 секунды
+        setTimeout(() => {
+            if (d.parentNode) d.remove();
+        }, 4000);
     }
     
     function escapeHtml(str) {
@@ -664,7 +656,7 @@
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 Сообщение: кому=${data.toId}, от=${data.fromId}`);
+            console.log(`📨 Сообщение: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
             
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
                 const senderId = data.fromId;
@@ -700,13 +692,13 @@
                 unreadCounts.set(senderId, current + 1);
                 console.log(`📊 Счетчик для ${senderName}: ${current + 1}`);
                 
-                // ОБНОВЛЯЕМ СПИСОК - ЭТО ДОБАВИТ ПОДСВЕТКУ!
+                // ОБНОВЛЯЕМ СПИСОК ПОЛЬЗОВАТЕЛЕЙ - ДОБАВЛЯЕМ ПОДСВЕТКУ!
                 renderUsersList();
                 
                 // ПОКАЗЫВАЕМ ЯРКОЕ УВЕДОМЛЕНИЕ
                 showNotification(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Если чат открыт - показываем сообщение
+                // Если чат уже открыт - показываем сообщение
                 if (currentChatId === senderId) {
                     messagesArea.innerHTML = '';
                     msgs.forEach(msg => {
