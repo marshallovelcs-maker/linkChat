@@ -62,7 +62,6 @@
             transition: all 0.2s;
         }
         .global-chat-btn:hover { background: #2a2a2a; }
-        .global-chat-btn .avatar { font-size: 1.2rem; }
         .user-item {
             display: flex;
             align-items: center;
@@ -75,14 +74,14 @@
             transition: all 0.2s;
         }
         .user-item:hover { background: #1a1a1a; }
-        .user-item.has-unread {
-            background: #2a5a2a;
+        .user-item.unread-highlight {
+            background: #3a6a3a;
             border-color: #ffaa33;
-            animation: glow 0.5s ease-out;
+            animation: blinkBg 1s ease-in-out infinite;
         }
-        @keyframes glow {
-            0% { background: #ffaa33; box-shadow: 0 0 10px #ffaa33; }
-            100% { background: #2a5a2a; box-shadow: none; }
+        @keyframes blinkBg {
+            0%, 100% { background: #3a6a3a; }
+            50% { background: #ffaa33; color: #000; }
         }
         .user-info {
             display: flex;
@@ -92,21 +91,21 @@
         }
         .user-avatar { font-size: 1.2rem; }
         .user-name { color: #e0e0e0; font-size: 0.85rem; }
-        .user-id { color: #666; font-size: 0.7rem; font-family: monospace; margin-left: 0.5rem; }
-        .unread-indicator {
+        .user-id { color: #888; font-size: 0.7rem; font-family: monospace; margin-left: 0.5rem; }
+        .unread-badge {
             background: #ff4444;
             color: white;
-            font-size: 0.65rem;
-            padding: 2px 6px;
-            border-radius: 10px;
-            min-width: 20px;
-            text-align: center;
+            font-size: 0.7rem;
             font-weight: bold;
-            animation: pulse 1s infinite;
+            padding: 2px 6px;
+            border-radius: 12px;
+            min-width: 22px;
+            text-align: center;
+            animation: pulseBadge 1s infinite;
         }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.8; }
+        @keyframes pulseBadge {
+            0%, 100% { transform: scale(1); background: #ff4444; }
+            50% { transform: scale(1.1); background: #ff6666; }
         }
         .user-status { width: 8px; height: 8px; border-radius: 50%; }
         .status-online { background: #2ecc71; }
@@ -269,6 +268,23 @@
             border-radius: 8px;
             z-index: 1000;
         }
+        .notification-bell {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #ff4444;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 1000;
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
         .auth-overlay {
             position: fixed;
             top: 0;
@@ -393,14 +409,13 @@
     let currentUser = null;
     let myUsername = "";
     let myUniqueId = "";
-    let currentChatId = null; // null = общий чат, иначе userId
+    let currentChatId = null;
     let allUsers = new Map();
     let globalMessages = [];
     let globalMessageIds = new Set();
     let privateMessages = new Map();
     let privateMessageIds = new Map();
-    let lastReadTime = new Map();
-    let unreadCounts = new Map(); // userId -> количество непрочитанных
+    let unreadCounts = new Map();
     let globalListener = null;
     let privateListeners = new Map();
     let processedMsgIds = new Set();
@@ -446,14 +461,39 @@
         return uniqueId;
     }
     
-    function showToast(msg) {
-        let t = document.querySelector(".toast");
-        if (t) t.remove();
+    function showNotification(msg) {
+        // Всплывающее уведомление
+        let toast = document.querySelector(".toast");
+        if (toast) toast.remove();
         const d = document.createElement("div");
         d.className = "toast";
         d.innerHTML = `📩 ${escapeHtml(msg)}`;
         document.body.appendChild(d);
-        setTimeout(() => d.remove(), 3000);
+        setTimeout(() => d.remove(), 4000);
+        
+        // Мигающая иконка в заголовке страницы
+        let originalTitle = document.title;
+        let blinkInterval = setInterval(() => {
+            document.title = document.title === "🔔 Новое сообщение!" ? originalTitle : "🔔 Новое сообщение!";
+        }, 800);
+        setTimeout(() => {
+            clearInterval(blinkInterval);
+            document.title = originalTitle;
+        }, 5000);
+        
+        // Звук (простой beep через Web Audio)
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.frequency.value = 800;
+            gainNode.gain.value = 0.3;
+            oscillator.start();
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+            oscillator.stop(audioCtx.currentTime + 0.5);
+        } catch(e) { console.log("Звук не поддерживается"); }
     }
     
     function escapeHtml(str) {
@@ -478,35 +518,12 @@
         if (isUnread) setTimeout(() => div.classList.remove('unread'), 2000);
     }
     
-    function loadLastRead() {
-        try {
-            const saved = localStorage.getItem("fembo_lastread");
-            if (saved) {
-                const obj = JSON.parse(saved);
-                lastReadTime.clear();
-                Object.entries(obj).forEach(([k, v]) => lastReadTime.set(k, v));
-            }
-        } catch(e) {}
-    }
-    
-    function saveLastRead() {
-        const obj = {};
-        lastReadTime.forEach((v, k) => obj[k] = v);
-        localStorage.setItem("fembo_lastread", JSON.stringify(obj));
-    }
-    
-    function updateLastRead(userId) {
-        lastReadTime.set(userId, Date.now());
-        saveLastRead();
-    }
-    
     function renderUsersList() {
         const term = searchInput.value.toLowerCase();
         const users = Array.from(allUsers.entries())
             .filter(([id, u]) => u.name.toLowerCase().includes(term))
             .sort((a, b) => (b[1].online ? 1 : 0) - (a[1].online ? 1 : 0));
         
-        // Сначала добавляем кнопку общего чата
         let html = `
             <div class="global-chat-btn" id="globalChatBtn">
                 <span class="avatar">🌍</span>
@@ -521,14 +538,14 @@
                 const unreadCount = unreadCounts.get(id) || 0;
                 const hasUnread = unreadCount > 0;
                 return `
-                    <div class="user-item ${hasUnread ? 'has-unread' : ''}" data-id="${id}" data-name="${u.name}" data-uniqueid="${u.uniqueId}">
+                    <div class="user-item ${hasUnread ? 'unread-highlight' : ''}" data-id="${id}" data-name="${u.name}" data-uniqueid="${u.uniqueId}">
                         <div class="user-info">
                             <span class="user-avatar">🦊</span>
                             <span class="user-name">${escapeHtml(u.name)}</span>
                             <span class="user-id">${escapeHtml(u.uniqueId)}</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            ${hasUnread ? `<span class="unread-indicator">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
+                            ${hasUnread ? `<span class="unread-badge">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
                             <div class="user-status ${u.online ? 'status-online' : 'status-offline'}"></div>
                         </div>
                     </div>
@@ -538,7 +555,6 @@
         
         usersListDiv.innerHTML = html;
         
-        // Добавляем обработчики
         document.getElementById("globalChatBtn")?.addEventListener("click", () => openGlobalChat());
         document.querySelectorAll('.user-item').forEach(el => {
             el.addEventListener('click', () => {
@@ -554,16 +570,11 @@
         currentChatId = targetId;
         currentChatTitle.textContent = `💬 ${targetName} ${targetUniqueId}`;
         
-        // Сбрасываем счетчик непрочитанных
         if (unreadCounts.has(targetId)) {
             unreadCounts.delete(targetId);
             renderUsersList();
         }
         
-        updateLastRead(targetId);
-        
-        // Загружаем сообщения
-        messagesArea.innerHTML = '<div class="system">◼ Загрузка...</div>';
         const msgs = privateMessages.get(targetId) || [];
         if (msgs.length === 0) {
             messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
@@ -579,7 +590,6 @@
     function openGlobalChat() {
         currentChatId = null;
         currentChatTitle.textContent = "# Общий чат";
-        messagesArea.innerHTML = '<div class="system">◼ Загрузка...</div>';
         if (globalMessages.length === 0) {
             messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
         } else {
@@ -640,7 +650,7 @@
     
     // Глобальный слушатель для уведомлений
     function setupNotificationListener() {
-        console.log("🔔 СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ ЗАПУЩЕН");
+        console.log("🔔 СЛУШАТЕЛЬ ЗАПУЩЕН");
         
         const privateMessagesRef = ref(db, "private_messages");
         
@@ -650,15 +660,12 @@
             const msgTime = data?.timestamp || Date.now();
             
             if (!data || !data.text) return;
-            
-            // Пропускаем старые сообщения
             if (msgTime < lastMessageTime - 1000) return;
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
-            console.log(`📨 Сообщение: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
+            console.log(`📨 Сообщение: кому=${data.toId}, от=${data.fromId}`);
             
-            // Проверяем, что сообщение для текущего пользователя
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
                 const senderId = data.fromId;
                 const senderName = data.username;
@@ -688,27 +695,25 @@
                     privateMessages.set(senderId, msgs);
                 }
                 
-                // Увеличиваем счетчик непрочитанных
+                // Увеличиваем счетчик
                 const current = unreadCounts.get(senderId) || 0;
                 unreadCounts.set(senderId, current + 1);
                 console.log(`📊 Счетчик для ${senderName}: ${current + 1}`);
                 
-                // ОБНОВЛЯЕМ СПИСОК ПОЛЬЗОВАТЕЛЕЙ (это добавит подсветку)
+                // ОБНОВЛЯЕМ СПИСОК - ЭТО ДОБАВИТ ПОДСВЕТКУ!
                 renderUsersList();
                 
-                // Показываем уведомление
-                showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
+                // ПОКАЗЫВАЕМ ЯРКОЕ УВЕДОМЛЕНИЕ
+                showNotification(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Если чат уже открыт - показываем сообщение и сбрасываем счетчик
+                // Если чат открыт - показываем сообщение
                 if (currentChatId === senderId) {
-                    console.log(`📱 Чат с ${senderName} открыт, показываем сообщение`);
                     messagesArea.innerHTML = '';
                     msgs.forEach(msg => {
                         addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid, true);
                     });
                     unreadCounts.delete(senderId);
                     renderUsersList();
-                    updateLastRead(senderId);
                 }
             }
         });
@@ -717,10 +722,10 @@
     // Отправка сообщения
     let lastSend = 0;
     function sendMessage() {
-        if (!myUsername || !myUniqueId) { showToast("Загрузка данных..."); return; }
+        if (!myUsername || !myUniqueId) { alert("Загрузка данных..."); return; }
         const text = messageInput.value.trim();
         if (!text) return;
-        if (Date.now() - lastSend < 500) { showToast("Подождите"); return; }
+        if (Date.now() - lastSend < 500) { alert("Подождите"); return; }
         lastSend = Date.now();
         
         if (currentChatId === null) {
@@ -849,13 +854,11 @@
         
         lastMessageTime = Date.now();
         
-        loadLastRead();
         startGlobalListener();
         setupNotificationListener();
         updateStatus();
         setInterval(updateStatus, 30000);
         
-        // Загружаем глобальный чат по умолчанию
         openGlobalChat();
         
         console.log("🚀 ЧАТ ЗАПУЩЕН!");
@@ -894,7 +897,7 @@
             await set(ref(db, `users/${currentUser.uid}/username`), myUsername);
             userNicknameSpan.textContent = myUsername;
             updateStatus();
-            showToast(`Имя изменено на ${myUsername}`);
+            alert(`Имя изменено на ${myUsername}`);
         }
     });
     
@@ -907,7 +910,7 @@
     messageInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
     copyBtn.addEventListener("click", () => {
         navigator.clipboard.writeText(window.location.href);
-        showToast("Ссылка скопирована");
+        alert("Ссылка скопирована");
     });
     
     window.addEventListener("beforeunload", () => {
