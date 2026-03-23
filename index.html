@@ -49,6 +49,20 @@
             overflow-y: auto;
             padding: 0.5rem;
         }
+        .global-chat-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.7rem;
+            margin: 0.2rem 0 0.5rem 0;
+            background: #1a1a1a;
+            border: 1px solid #4a4a4a;
+            cursor: pointer;
+            color: #e0e0e0;
+            transition: all 0.2s;
+        }
+        .global-chat-btn:hover { background: #2a2a2a; }
+        .global-chat-btn .avatar { font-size: 1.2rem; }
         .user-item {
             display: flex;
             align-items: center;
@@ -64,12 +78,11 @@
         .user-item.has-unread {
             background: #2a5a2a;
             border-color: #ffaa33;
-            animation: pulse 0.5s ease-in-out;
+            animation: glow 0.5s ease-out;
         }
-        @keyframes pulse {
-            0% { background: #2a5a2a; }
-            50% { background: #ffaa33; }
-            100% { background: #2a5a2a; }
+        @keyframes glow {
+            0% { background: #ffaa33; box-shadow: 0 0 10px #ffaa33; }
+            100% { background: #2a5a2a; box-shadow: none; }
         }
         .user-info {
             display: flex;
@@ -89,11 +102,11 @@
             min-width: 20px;
             text-align: center;
             font-weight: bold;
-            animation: blinkUnread 1s infinite;
+            animation: pulse 1s infinite;
         }
-        @keyframes blinkUnread {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
         }
         .user-status { width: 8px; height: 8px; border-radius: 50%; }
         .status-online { background: #2ecc71; }
@@ -493,29 +506,40 @@
             .filter(([id, u]) => u.name.toLowerCase().includes(term))
             .sort((a, b) => (b[1].online ? 1 : 0) - (a[1].online ? 1 : 0));
         
+        // Сначала добавляем кнопку общего чата
+        let html = `
+            <div class="global-chat-btn" id="globalChatBtn">
+                <span class="avatar">🌍</span>
+                <span>Общий чат</span>
+            </div>
+        `;
+        
         if (users.length === 0) {
-            usersListDiv.innerHTML = '<div class="system" style="margin:1rem;">◼ Нет пользователей</div>';
-            return;
+            html += '<div class="system" style="margin:1rem;">◼ Нет пользователей</div>';
+        } else {
+            html += users.map(([id, u]) => {
+                const unreadCount = unreadCounts.get(id) || 0;
+                const hasUnread = unreadCount > 0;
+                return `
+                    <div class="user-item ${hasUnread ? 'has-unread' : ''}" data-id="${id}" data-name="${u.name}" data-uniqueid="${u.uniqueId}">
+                        <div class="user-info">
+                            <span class="user-avatar">🦊</span>
+                            <span class="user-name">${escapeHtml(u.name)}</span>
+                            <span class="user-id">${escapeHtml(u.uniqueId)}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            ${hasUnread ? `<span class="unread-indicator">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
+                            <div class="user-status ${u.online ? 'status-online' : 'status-offline'}"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
         
-        usersListDiv.innerHTML = users.map(([id, u]) => {
-            const unreadCount = unreadCounts.get(id) || 0;
-            const hasUnread = unreadCount > 0;
-            return `
-                <div class="user-item ${hasUnread ? 'has-unread' : ''}" data-id="${id}" data-name="${u.name}" data-uniqueid="${u.uniqueId}">
-                    <div class="user-info">
-                        <span class="user-avatar">🦊</span>
-                        <span class="user-name">${escapeHtml(u.name)}</span>
-                        <span class="user-id">${escapeHtml(u.uniqueId)}</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        ${hasUnread ? `<span class="unread-indicator">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
-                        <div class="user-status ${u.online ? 'status-online' : 'status-offline'}"></div>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        usersListDiv.innerHTML = html;
         
+        // Добавляем обработчики
+        document.getElementById("globalChatBtn")?.addEventListener("click", () => openGlobalChat());
         document.querySelectorAll('.user-item').forEach(el => {
             el.addEventListener('click', () => {
                 const targetId = el.dataset.id;
@@ -540,28 +564,6 @@
         
         // Загружаем сообщения
         messagesArea.innerHTML = '<div class="system">◼ Загрузка...</div>';
-        loadPrivateMessages(targetId);
-    }
-    
-    function openGlobalChat() {
-        currentChatId = null;
-        currentChatTitle.textContent = "# Общий чат";
-        messagesArea.innerHTML = '<div class="system">◼ Загрузка...</div>';
-        loadGlobalMessages();
-    }
-    
-    function loadGlobalMessages() {
-        if (globalMessages.length === 0) {
-            messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
-        } else {
-            messagesArea.innerHTML = '';
-            globalMessages.forEach(msg => {
-                addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid, false);
-            });
-        }
-    }
-    
-    function loadPrivateMessages(targetId) {
         const msgs = privateMessages.get(targetId) || [];
         if (msgs.length === 0) {
             messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
@@ -572,6 +574,20 @@
             });
         }
         startPrivateListener(targetId);
+    }
+    
+    function openGlobalChat() {
+        currentChatId = null;
+        currentChatTitle.textContent = "# Общий чат";
+        messagesArea.innerHTML = '<div class="system">◼ Загрузка...</div>';
+        if (globalMessages.length === 0) {
+            messagesArea.innerHTML = '<div class="system">◼ Нет сообщений</div>';
+        } else {
+            messagesArea.innerHTML = '';
+            globalMessages.forEach(msg => {
+                addMessageToDOM(msg.username, msg.uniqueId || "", msg.text, msg.timestamp, msg.userId === currentUser?.uid, false);
+            });
+        }
     }
     
     function startGlobalListener() {
@@ -640,6 +656,8 @@
             if (processedMsgIds.has(msgId)) return;
             processedMsgIds.add(msgId);
             
+            console.log(`📨 Сообщение: кому=${data.toId}, от=${data.fromId}, я=${currentUser?.uid}`);
+            
             // Проверяем, что сообщение для текущего пользователя
             if (currentUser && data.toId === currentUser.uid && data.fromId !== currentUser.uid) {
                 const senderId = data.fromId;
@@ -673,18 +691,21 @@
                 // Увеличиваем счетчик непрочитанных
                 const current = unreadCounts.get(senderId) || 0;
                 unreadCounts.set(senderId, current + 1);
-                renderUsersList(); // Обновляем список пользователей с подсветкой
+                console.log(`📊 Счетчик для ${senderName}: ${current + 1}`);
+                
+                // ОБНОВЛЯЕМ СПИСОК ПОЛЬЗОВАТЕЛЕЙ (это добавит подсветку)
+                renderUsersList();
                 
                 // Показываем уведомление
                 showToast(`💬 Новое сообщение от ${senderName} ${senderUniqueId}`);
                 
-                // Если чат уже открыт - показываем сообщение
+                // Если чат уже открыт - показываем сообщение и сбрасываем счетчик
                 if (currentChatId === senderId) {
+                    console.log(`📱 Чат с ${senderName} открыт, показываем сообщение`);
                     messagesArea.innerHTML = '';
                     msgs.forEach(msg => {
                         addMessageToDOM(msg.username, msg.uniqueId, msg.text, msg.timestamp, msg.fromId === currentUser?.uid, true);
                     });
-                    // Сбрасываем счетчик
                     unreadCounts.delete(senderId);
                     renderUsersList();
                     updateLastRead(senderId);
@@ -734,23 +755,6 @@
             lastSeen: Date.now(),
             online: true
         }).catch(err => console.error(err));
-    }
-    
-    // Кнопка "Общий чат"
-    function addGlobalChatButton() {
-        const globalBtn = document.createElement("div");
-        globalBtn.className = "user-item";
-        globalBtn.style.marginBottom = "10px";
-        globalBtn.style.background = "#1a1a1a";
-        globalBtn.style.border = "1px solid #4a4a4a";
-        globalBtn.innerHTML = `
-            <div class="user-info">
-                <span class="user-avatar">🌍</span>
-                <span class="user-name">Общий чат</span>
-            </div>
-        `;
-        globalBtn.addEventListener("click", () => openGlobalChat());
-        usersListDiv.parentElement.insertBefore(globalBtn, usersListDiv);
     }
     
     // Auth Modal
@@ -850,7 +854,6 @@
         setupNotificationListener();
         updateStatus();
         setInterval(updateStatus, 30000);
-        addGlobalChatButton();
         
         // Загружаем глобальный чат по умолчанию
         openGlobalChat();
